@@ -41,6 +41,7 @@ jobs:
           
           echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+          echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
           echo "Detected NDK at: $NDK_PATH"
 
       - name: Setup Node.js
@@ -68,18 +69,29 @@ jobs:
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          NDK_HOME: ${{ env.NDK_HOME }}
         run: |
+          pnpm tauri info
           if [ ! -d "src-tauri/gen/android" ]; then
             pnpm tauri android init --ci
           fi
           if [ -f "src-tauri/gen/android/gradlew" ]; then
             chmod +x src-tauri/gen/android/gradlew
           fi
-          pnpm tauri android build --apk
+          pnpm tauri android build --apk --target aarch64 --debug
 
       - name: Upload APK Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kplanner-release-apk
+          name: kplanner-apk
           path: |
             src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+      - name: Upload Diagnostic Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-logs
+          path: |
+            src-tauri/gen/android/app/build/reports/
