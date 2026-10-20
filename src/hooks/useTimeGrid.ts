@@ -8,14 +8,18 @@ export interface UseTimeGridReturn {
     hour: HourValue,
     tenMinIndex: TenMinuteIndex,
     subjectId: EntityId | null,
-    taskId?: EntityId | null
+    taskId?: EntityId | null,
+    isPlanMode?: boolean,
+    isVerifiedTimer?: boolean
   ) => void;
   paintRange: (
     cells: Array<{ hour: HourValue; tenMinIndex: TenMinuteIndex }>,
     subjectId: EntityId | null,
-    taskId?: EntityId | null
+    taskId?: EntityId | null,
+    isPlanMode?: boolean,
+    isVerifiedTimer?: boolean
   ) => void;
-  eraseCell: (hour: HourValue, tenMinIndex: TenMinuteIndex) => void;
+  eraseCell: (hour: HourValue, tenMinIndex: TenMinuteIndex, isPlanMode?: boolean) => void;
   useCellState: (hour: HourValue, tenMinIndex: TenMinuteIndex) => TimeBlock | undefined;
 }
 
@@ -25,8 +29,15 @@ export function useTimeGrid(date: DateString): UseTimeGridReturn {
   const eraseCellStore = usePlannerStore((state) => state.eraseCell);
 
   const paintCell = useCallback(
-    (hour: HourValue, tenMinIndex: TenMinuteIndex, subjectId: EntityId | null, taskId?: EntityId | null) => {
-      paintCellStore(date, hour, tenMinIndex, subjectId, taskId);
+    (
+      hour: HourValue,
+      tenMinIndex: TenMinuteIndex,
+      subjectId: EntityId | null,
+      taskId?: EntityId | null,
+      isPlanMode = false,
+      isVerifiedTimer = false
+    ) => {
+      paintCellStore(date, hour, tenMinIndex, subjectId, taskId, 1.0, isPlanMode, isVerifiedTimer);
     },
     [date, paintCellStore]
   );
@@ -35,16 +46,18 @@ export function useTimeGrid(date: DateString): UseTimeGridReturn {
     (
       cells: Array<{ hour: HourValue; tenMinIndex: TenMinuteIndex }>,
       subjectId: EntityId | null,
-      taskId?: EntityId | null
+      taskId?: EntityId | null,
+      isPlanMode = false,
+      isVerifiedTimer = false
     ) => {
-      paintRangeStore(date, cells, subjectId, taskId);
+      paintRangeStore(date, cells, subjectId, taskId, isPlanMode, isVerifiedTimer);
     },
     [date, paintRangeStore]
   );
 
   const eraseCell = useCallback(
-    (hour: HourValue, tenMinIndex: TenMinuteIndex) => {
-      eraseCellStore(date, hour, tenMinIndex);
+    (hour: HourValue, tenMinIndex: TenMinuteIndex, isPlanMode = false) => {
+      eraseCellStore(date, hour, tenMinIndex, isPlanMode);
     },
     [date, eraseCellStore]
   );

@@ -1,8 +1,10 @@
+use crate::models::{
+    create_empty_daily_sheet, AppData, DDayEvent, DailySheet, SubjectItem, TimerConfig,
+};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use crate::models::{create_empty_daily_sheet, AppData, DailySheet, SubjectItem, TimerConfig};
 
 pub struct StorageManager {
     file_path: PathBuf,
@@ -48,7 +50,9 @@ impl StorageManager {
             sheet.clone()
         } else {
             let new_sheet = create_empty_daily_sheet(date);
-            guard.daily_sheets.insert(date.to_string(), new_sheet.clone());
+            guard
+                .daily_sheets
+                .insert(date.to_string(), new_sheet.clone());
             let _ = Self::save_to_disk(&self.file_path, &guard);
             new_sheet
         }
@@ -84,6 +88,31 @@ impl StorageManager {
     pub fn save_timer_config(&self, config: TimerConfig) -> Result<(), String> {
         let mut guard = self.data.lock().unwrap();
         guard.timer_config = config;
+        Self::save_to_disk(&self.file_path, &guard)
+    }
+
+    pub fn get_dday_events(&self) -> Vec<DDayEvent> {
+        let guard = self.data.lock().unwrap();
+        guard.dday_events.clone()
+    }
+
+    pub fn save_dday_events(&self, events: Vec<DDayEvent>) -> Result<(), String> {
+        let mut guard = self.data.lock().unwrap();
+        guard.dday_events = events;
+        Self::save_to_disk(&self.file_path, &guard)
+    }
+
+    pub fn get_bottom_memo_preset(&self) -> String {
+        let guard = self.data.lock().unwrap();
+        guard
+            .bottom_memo_preset
+            .clone()
+            .unwrap_or_else(|| "classic".to_string())
+    }
+
+    pub fn save_bottom_memo_preset(&self, preset: String) -> Result<(), String> {
+        let mut guard = self.data.lock().unwrap();
+        guard.bottom_memo_preset = Some(preset);
         Self::save_to_disk(&self.file_path, &guard)
     }
 

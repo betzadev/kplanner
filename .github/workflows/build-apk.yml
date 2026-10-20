@@ -63,7 +63,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android
 
       - name: Build Web Frontend
         run: pnpm build
@@ -84,13 +84,25 @@ jobs:
               pnpm tauri android init --ci
             fi
             
-            echo "=== GRADLEW CHMOD ==="
+            echo "=== GRADLEW CHMOD & SHRINKING INJECTION ==="
             if [ -f "src-tauri/gen/android/gradlew" ]; then
               chmod +x src-tauri/gen/android/gradlew
             fi
             
-            echo "=== TAURI ANDROID BUILD ==="
-            pnpm tauri android build --apk --target aarch64 --debug
+            GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
+            if [ -f "$GRADLE_APP" ]; then
+              python3 -c '
+with open("src-tauri/gen/android/app/build.gradle.kts", "r") as f:
+    c = f.read()
+if "isMinifyEnabled" not in c:
+    c = c.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = true\n            isShrinkResources = true")
+    with open("src-tauri/gen/android/app/build.gradle.kts", "w") as f:
+        f.write(c)
+'
+            fi
+            
+            echo "=== TAURI ANDROID BUILD (aarch64) ==="
+            pnpm tauri android build --apk --target aarch64
           ) 2>&1 | tee build.log
 
       - name: Push Build Log to ci-logs Branch

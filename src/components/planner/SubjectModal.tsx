@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { SubjectLegendItem, DEFAULT_PASTEL_PALETTE, HexColor } from '../../types';
+import { createPortal } from 'react-dom';
+import { SubjectLegendItem, DEFAULT_PASTEL_PALETTE, HexColor, UNLOCKABLE_THEMES } from '../../types';
 import { ColorCircle } from '../ui/ColorCircle';
-import { X, Trash2, Check, Plus } from 'lucide-react';
+import { useGamificationStore } from '../../store/useGamificationStore';
+import { X, Trash2, Check } from 'lucide-react';
 import { triggerHaptic } from '../../utils/haptics';
 
 interface SubjectModalProps {
@@ -23,6 +25,9 @@ export function SubjectModal({
 }: SubjectModalProps) {
   const [name, setName] = useState('');
   const [color, setColor] = useState<HexColor>(DEFAULT_PASTEL_PALETTE[0]);
+  const [selectedThemeId, setSelectedThemeId] = useState<string>('dreamy_pastel');
+
+  const unlockedThemes = useGamificationStore((state) => state.unlockedThemes) ?? ['dreamy_pastel'];
 
   useEffect(() => {
     if (isOpen) {
@@ -31,13 +36,14 @@ export function SubjectModal({
         setColor(subjectToEdit.color);
       } else {
         setName('');
-        // Pick an unused or default color
         setColor(DEFAULT_PASTEL_PALETTE[0]);
       }
     }
   }, [isOpen, mode, subjectToEdit]);
 
   if (!isOpen) return null;
+
+  const currentTheme = UNLOCKABLE_THEMES.find((t) => t.id === selectedThemeId) || UNLOCKABLE_THEMES[0];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,9 +62,11 @@ export function SubjectModal({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="w-full max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
@@ -111,13 +119,30 @@ export function SubjectModal({
             />
           </div>
 
-          {/* Preset Pastel Palette */}
+          {/* Theme Palette Switcher */}
           <div>
-            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wider">
-              Pastel Color Palette
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                Palette
+              </label>
+              <select
+                value={selectedThemeId}
+                onChange={(e) => setSelectedThemeId(e.target.value)}
+                className="text-[10px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-0.5 text-slate-700 dark:text-slate-200 cursor-pointer"
+              >
+                {UNLOCKABLE_THEMES.filter(
+                  (t) => t.priceGems === 0 || unlockedThemes.includes(t.id)
+                ).map((theme) => (
+                  <option key={theme.id} value={theme.id}>
+                    {theme.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Colors Grid */}
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 mb-2">
-              {DEFAULT_PASTEL_PALETTE.map((palColor) => (
+              {currentTheme.colors.map((palColor) => (
                 <button
                   key={palColor}
                   type="button"
@@ -178,25 +203,15 @@ export function SubjectModal({
               </button>
               <button
                 type="submit"
-                disabled={!name.trim()}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 text-xs font-bold rounded-lg transition-all shadow-xs disabled:opacity-40 cursor-pointer"
+                className="px-4 py-1.5 text-xs font-bold text-white bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 rounded-lg shadow-xs transition-colors cursor-pointer"
               >
-                {mode === 'edit' ? (
-                  <>
-                    <Check size={14} />
-                    Save Changes
-                  </>
-                ) : (
-                  <>
-                    <Plus size={14} />
-                    Add Subject
-                  </>
-                )}
+                {mode === 'edit' ? 'Save Changes' : 'Add Subject'}
               </button>
             </div>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

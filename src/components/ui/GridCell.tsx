@@ -5,8 +5,10 @@ interface GridCellProps {
   hour: HourValue;
   tenMinIndex: TenMinuteIndex;
   color: string | null;
+  plannedColor?: string | null;
   fillRatio?: number;
   isCurrent?: boolean;
+  isPlanMode?: boolean;
   onMouseDown?: (hour: HourValue, tenMinIndex: TenMinuteIndex, e: React.MouseEvent) => void;
   onMouseEnter?: (hour: HourValue, tenMinIndex: TenMinuteIndex, e: React.MouseEvent) => void;
 }
@@ -14,8 +16,10 @@ interface GridCellProps {
 const areEqual = (prev: GridCellProps, next: GridCellProps): boolean => {
   return (
     prev.color === next.color &&
+    prev.plannedColor === next.plannedColor &&
     prev.fillRatio === next.fillRatio &&
     prev.isCurrent === next.isCurrent &&
+    prev.isPlanMode === next.isPlanMode &&
     prev.hour === next.hour &&
     prev.tenMinIndex === next.tenMinIndex
   );
@@ -25,8 +29,10 @@ export const GridCell = memo(function GridCell({
   hour,
   tenMinIndex,
   color,
+  plannedColor,
   fillRatio = 1.0,
   isCurrent = false,
+  isPlanMode = false,
   onMouseDown,
   onMouseEnter,
 }: GridCellProps) {
@@ -38,13 +44,33 @@ export const GridCell = memo(function GridCell({
       data-tenmin={tenMinIndex}
       onMouseDown={(e) => onMouseDown?.(hour, tenMinIndex, e)}
       onMouseEnter={(e) => onMouseEnter?.(hour, tenMinIndex, e)}
-      className={`relative h-[20px] sm:h-[18px] flex-1 min-w-[28px] sm:min-w-[26px] border-r border-b border-slate-200 dark:border-slate-800/80 select-none cursor-pointer transition-colors ${
+      className={`relative h-[20px] sm:h-[18px] flex-1 min-w-[28px] sm:min-w-[26px] border-r border-b border-slate-200 dark:border-slate-800/80 select-none cursor-pointer transition-colors overflow-hidden ${
         isCurrent ? 'ring-1.5 ring-blue-500 ring-inset z-10' : ''
       }`}
-      title={`${String(hour).padStart(2, '0')}:${tenMinIndex * 10} - ${tenMinIndex * 10 + 10}m`}
+      title={`${String(hour).padStart(2, '0')}:${tenMinIndex * 10} - ${
+        tenMinIndex * 10 + 10
+      }m ${color ? '• Actual Logged' : ''} ${plannedColor ? '• Planned' : ''}`}
       role="gridcell"
     >
-      {color && (
+      {/* Planned Subject Hatch / Border Indicator */}
+      {plannedColor && (
+        <div
+          className={`absolute inset-0 pointer-events-none ${
+            isPlanMode
+              ? 'border-2 border-dashed'
+              : 'border-l-2'
+          }`}
+          style={{
+            borderColor: plannedColor,
+            backgroundImage: isPlanMode
+              ? `repeating-linear-gradient(45deg, ${plannedColor}33, ${plannedColor}33 3px, transparent 3px, transparent 6px)`
+              : undefined,
+          }}
+        />
+      )}
+
+      {/* Actual Study Log Fill (Solid / Proportional) */}
+      {color && !isPlanMode && (
         <div
           className="h-full pointer-events-none transition-all duration-75 ease-out"
           style={{

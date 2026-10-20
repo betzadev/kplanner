@@ -4,16 +4,18 @@ mod storage;
 mod turso;
 
 use commands::*;
-use storage::StorageManager;
-use turso::TursoManager;
 use std::sync::Arc;
+use storage::StorageManager;
 use tauri::Manager;
 use tokio::sync::Mutex;
+use turso::TursoManager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_haptics::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir().unwrap_or_else(|_| {
                 std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
@@ -51,6 +53,10 @@ pub fn run() {
             save_subjects,
             load_timer_config,
             save_timer_config,
+            load_dday_events,
+            save_dday_events,
+            load_bottom_memo_preset,
+            save_bottom_memo_preset,
             export_data,
             import_data,
             sync_turso_database,

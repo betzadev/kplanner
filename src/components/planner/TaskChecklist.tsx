@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, CheckCircle2, History } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, History, Layers } from 'lucide-react';
 import { DateString, EntityId, PlannerTask } from '../../types';
 import { CheckBox } from '../ui/CheckBox';
 import { ColorCircle } from '../ui/ColorCircle';
 import { useSubjectStore } from '../../store/useSubjectStore';
 import { triggerHaptic } from '../../utils/haptics';
+import { AutoSplitModal } from './AutoSplitModal';
 
 interface TaskChecklistProps {
   date: DateString;
@@ -15,12 +16,14 @@ interface TaskChecklistProps {
 }
 
 export function TaskChecklist({
+  date,
   tasks,
   onAddTask,
   onToggleTask,
   onDeleteTask,
 }: TaskChecklistProps) {
   const [newTitle, setNewTitle] = useState('');
+  const [autoSplitOpen, setAutoSplitOpen] = useState(false);
   const subjects = useSubjectStore((state) => state.subjects);
   const selectedSubjectId = useSubjectStore((state) => state.selectedSubjectId) ?? subjects[0]?.id;
   const [taskSubjectId, setTaskSubjectId] = useState<EntityId | null>(null);
@@ -53,11 +56,25 @@ export function TaskChecklist({
       <div className="flex items-center justify-between pb-2.5 border-b border-[#E4EDFC] dark:border-slate-800">
         <div className="flex items-center gap-2">
           <CheckCircle2 size={17} className="text-blue-600 dark:text-[#9FC6FC]" />
-          <span className="text-smsm font-bold text-slate-700 dark:text-slate-200">
+          <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">
             Daily Tasks
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Phase 3.3 Auto-Split Workload Generator Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setAutoSplitOpen(true);
+              triggerHaptic('light');
+            }}
+            className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-[#E4EDFC] dark:bg-indigo-950/60 hover:bg-[#C2D8FC] dark:hover:bg-indigo-900/80 px-2.5 py-1 rounded-xl flex items-center gap-1 transition-colors cursor-pointer border border-indigo-200 dark:border-indigo-800"
+            title="Auto-Split a big workload (pages/chapters) across future days"
+          >
+            <Layers size={11} />
+            <span>Auto-Split</span>
+          </button>
+
           {tasks.some((t) => t.isRolledOver) && (
             <span
               className="text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-[#E4EDFC] dark:bg-blue-950/60 px-2 py-0.5 rounded-full flex items-center gap-1"
@@ -136,7 +153,7 @@ export function TaskChecklist({
         )}
       </div>
 
-      {/* Add Task Input Form: Responsive, doesn't overflow horizontally */}
+      {/* Add Task Input Form */}
       <form onSubmit={handleAdd} className="pt-2 border-t border-[#E4EDFC] dark:border-slate-800 flex items-center gap-2 w-full">
         <select
           value={activeSubjectId}
@@ -167,6 +184,13 @@ export function TaskChecklist({
           <Plus size={18} />
         </button>
       </form>
+
+      {/* Auto Split Workload Modal */}
+      <AutoSplitModal
+        isOpen={autoSplitOpen}
+        onClose={() => setAutoSplitOpen(false)}
+        currentDate={date}
+      />
     </div>
   );
 }

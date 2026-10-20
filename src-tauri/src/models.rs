@@ -19,6 +19,12 @@ pub struct PlannerTask {
     pub title: String,
     pub is_completed: bool,
     pub order: usize,
+    #[serde(default)]
+    pub is_rolled_over: Option<bool>,
+    #[serde(default)]
+    pub original_date: Option<String>,
+    #[serde(default)]
+    pub original_task_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,9 +33,15 @@ pub struct TimeBlock {
     pub hour: u8,
     pub ten_min_index: u8,
     pub subject_id: Option<String>,
+    #[serde(default)]
+    pub planned_subject_id: Option<String>,
+    #[serde(default)]
+    pub actual_subject_id: Option<String>,
     pub task_id: Option<String>,
     #[serde(default = "default_fill_ratio")]
     pub fill_ratio: f32,
+    #[serde(default)]
+    pub is_verified_timer: Option<bool>,
 }
 
 fn default_fill_ratio() -> f32 {
@@ -45,6 +57,20 @@ pub struct DailySheet {
     pub tasks: Vec<PlannerTask>,
     pub time_grid: HashMap<String, TimeBlock>,
     pub bottom_memos: [String; 6],
+    #[serde(default)]
+    pub memo_labels: Option<[String; 6]>,
+    #[serde(default)]
+    pub completion_stamp: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DDayEvent {
+    pub id: String,
+    pub title: String,
+    pub target_date: String,
+    pub color_id: String,
+    pub is_pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +83,22 @@ pub struct TimerConfig {
     pub auto_start_breaks: bool,
     pub auto_start_pomodoros: bool,
     pub sound_alerts_enabled: bool,
+    #[serde(default = "default_chime")]
+    pub chime_preset: String,
+    #[serde(default = "default_ambient")]
+    pub ambient_sound: String,
+    #[serde(default = "default_volume")]
+    pub ambient_volume: f32,
+}
+
+fn default_chime() -> String {
+    "default".to_string()
+}
+fn default_ambient() -> String {
+    "none".to_string()
+}
+fn default_volume() -> f32 {
+    0.5
 }
 
 impl Default for TimerConfig {
@@ -69,6 +111,9 @@ impl Default for TimerConfig {
             auto_start_breaks: true,
             auto_start_pomodoros: false,
             sound_alerts_enabled: true,
+            chime_preset: default_chime(),
+            ambient_sound: default_ambient(),
+            ambient_volume: default_volume(),
         }
     }
 }
@@ -137,8 +182,11 @@ pub fn create_empty_daily_sheet(date: &str) -> DailySheet {
                     hour,
                     ten_min_index: ten_min,
                     subject_id: None,
+                    planned_subject_id: None,
+                    actual_subject_id: None,
                     task_id: None,
                     fill_ratio: 0.0,
+                    is_verified_timer: None,
                 },
             );
         }
@@ -158,6 +206,8 @@ pub fn create_empty_daily_sheet(date: &str) -> DailySheet {
             String::new(),
             String::new(),
         ],
+        memo_labels: None,
+        completion_stamp: None,
     }
 }
 
@@ -167,6 +217,10 @@ pub struct AppData {
     pub daily_sheets: HashMap<String, DailySheet>,
     pub subjects: Vec<SubjectItem>,
     pub timer_config: TimerConfig,
+    #[serde(default)]
+    pub dday_events: Vec<DDayEvent>,
+    #[serde(default)]
+    pub bottom_memo_preset: Option<String>,
 }
 
 impl Default for AppData {
@@ -175,6 +229,8 @@ impl Default for AppData {
             daily_sheets: HashMap::new(),
             subjects: default_subjects(),
             timer_config: TimerConfig::default(),
+            dday_events: Vec::new(),
+            bottom_memo_preset: Some("classic".to_string()),
         }
     }
 }

@@ -1,4 +1,5 @@
-use libsql::{Builder, Database, Connection};
+use crate::models::{DDayEvent, SubjectItem};
+use libsql::{Builder, Connection, Database};
 use std::path::PathBuf;
 
 pub struct TursoManager {
@@ -31,10 +32,11 @@ impl TursoManager {
             }
         };
 
-        let conn = db.connect()
+        let conn = db
+            .connect()
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-        // Crear tablas principales para las hojas diarias y materias
+        // Crear tablas principales para las hojas diarias y materias con columnas updated_at
         conn.execute(
             "CREATE TABLE IF NOT EXISTS daily_sheets (
                 date TEXT PRIMARY KEY,
@@ -53,7 +55,22 @@ impl TursoManager {
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 color TEXT NOT NULL,
-                slot_index INTEGER NOT NULL
+                slot_index INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );",
+            (),
+        )
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS dday_events (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                target_date TEXT NOT NULL,
+                color_id TEXT NOT NULL,
+                is_pinned INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
             );",
             (),
         )
@@ -65,12 +82,113 @@ impl TursoManager {
 
     /// Sincronización nativa con Turso: envía mutaciones locales y descarga las nuevas
     pub async fn sync(&self) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        let replicated = self.db.sync().await
+        let replicated = self
+            .db
+            .sync()
+            .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         Ok(replicated.frames_synced())
     }
 
+    #[allow(dead_code)]
     pub fn connection(&self) -> &Connection {
         &self.conn
+    }
+
+    /// Escritura idempotente con UPSERT y timestamp updated_at
+    pub async fn upsert_daily_sheet(
+        &self,
+        date: &str,
+        main_goal: &str,
+        total_minutes: u32,
+        data_json: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        self.conn
+            .execute(
+                "INSERT INTO daily_sheets (date, main_goal, total_minutes, data_json, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(date) DO UPDATE SET
+                     main_goal = excluded.main_goal,
+                     total_minutes = excluded.total_minutes,
+                     data_json = excluded.data_json,
+                     updated_at = excluded.updated_at;",
+                libsql::params![date, main_goal, total_minutes as i64, data_json, now],
+            )
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        Ok(())
+    }
+
+    pub async fn upsert_subjects(
+        &self,
+        subjects: &[SubjectItem],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        for s in subjects {
+            self.conn
+                .execute(
+                    "INSERT INTO subjects (id, name, color, slot_index, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT(id) DO UPDATE SET
+                         name = excluded.name,
+                         color = excluded.color,
+                         slot_index = excluded.slot_index,
+                         updated_at = excluded.updated_at;",
+                    libsql::params![
+                        s.id.as_str(),
+                        s.name.as_str(),
+                        s.color.as_str(),
+                        s.slot_index as i64,
+                        now
+                    ],
+                )
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        }
+        Ok(())
+    }
+
+    pub async fn upsert_dday_events(
+        &self,
+        events: &[DDayEvent],
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        for ev in events {
+            self.conn
+                .execute(
+                    "INSERT INTO dday_events (id, title, target_date, color_id, is_pinned, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                     ON CONFLICT(id) DO UPDATE SET
+                         title = excluded.title,
+                         target_date = excluded.target_date,
+                         color_id = excluded.color_id,
+                         is_pinned = excluded.is_pinned,
+                         updated_at = excluded.updated_at;",
+                    libsql::params![
+                        ev.id.as_str(),
+                        ev.title.as_str(),
+                        ev.target_date.as_str(),
+                        ev.color_id.as_str(),
+                        if ev.is_pinned { 1i64 } else { 0i64 },
+                        now
+                    ],
+                )
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        }
+        Ok(())
     }
 }
