@@ -13,21 +13,26 @@ impl TursoManager {
         local_db_path: PathBuf,
         turso_url: Option<String>,
         auth_token: Option<String>,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let db = match (turso_url, auth_token) {
             (Some(url), Some(token)) if !url.is_empty() && !token.is_empty() => {
                 // Modo réplica remota nativa con sincronización en la nube (Turso)
                 Builder::new_remote_replica(local_db_path, url, token)
                     .build()
-                    .await?
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
             }
             _ => {
                 // Modo local SQLite puro (0ms de latencia, sin conexión requerida)
-                Builder::new_local(local_db_path).build().await?
+                Builder::new_local(local_db_path)
+                    .build()
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
             }
         };
 
-        let conn = db.connect()?;
+        let conn = db.connect()
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         // Crear tablas principales para las hojas diarias y materias
         conn.execute(
@@ -40,7 +45,8 @@ impl TursoManager {
             );",
             (),
         )
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS subjects (
@@ -51,14 +57,16 @@ impl TursoManager {
             );",
             (),
         )
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         Ok(Self { db, conn })
     }
 
     /// Sincronización nativa con Turso: envía mutaciones locales y descarga las nuevas
-    pub async fn sync(&self) -> Result<usize, Box<dyn std::error::Error>> {
-        let replicated = self.db.sync().await?;
+    pub async fn sync(&self) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        let replicated = self.db.sync().await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         Ok(replicated.frames_synced())
     }
 
