@@ -10,7 +10,7 @@ import {
   TimeBlock,
   EntityId,
 } from '../types';
-import { toDateString, buildGridCellKey } from '../utils/timeSlotMapper';
+import { toDateString, buildGridCellKey, parseDateString } from '../utils/timeSlotMapper';
 import { tauriApi } from '../services/tauriApi';
 
 export interface PlannerStoreState {
@@ -30,6 +30,7 @@ export interface PlannerStoreActions {
   updateTask: (date: DateString, taskId: EntityId, updates: Partial<Omit<PlannerTask, 'id' | 'date'>>) => void;
   toggleTask: (date: DateString, taskId: EntityId) => void;
   deleteTask: (date: DateString, taskId: EntityId) => void;
+  rolloverUnfinishedTasks: (targetDate: DateString) => void;
   paintCell: (
     date: DateString,
     hour: HourValue,
@@ -96,6 +97,7 @@ export const usePlannerStore = create<PlannerStore>()(
         set({ currentDate: date });
         get().createSheetIfNotExists(date);
         get().loadSheetFromRust(date);
+        get().rolloverUnfinishedTasks(date);
       },
 
       loadSheetFromRust: async (date: DateString): Promise<DailySheet> => {
@@ -107,14 +109,79 @@ export const usePlannerStore = create<PlannerStore>()(
               [date]: rustSheet,
             },
           }));
+          get().rolloverUnfinishedTasks(date);
           return rustSheet;
         }
         return get().createSheetIfNotExists(date);
       },
 
+      rolloverUnfinishedTasks: (targetDate: DateString) => {
+        const state = get();
+        const currentSheet = state.dailySheets[targetDate];
+        if (!currentSheet) return;
+
+        const targetTime = parseDateString(targetDate).getTime();
+        const pastDates = Object.keys(state.dailySheets)
+          .filter((d) => {
+            const time = parseDateString(d as DateString).getTime();
+            return time < targetTime;
+          })
+          .sort((a, b) => parseDateString(b as DateString).getTime() - parseDateString(a as DateString).getTime());
+
+        if (pastDates.length === 0) return;
+
+        let hasNewRollovers = false;
+        const newTasks: PlannerTask[] = [...currentSheet.tasks];
+
+        pastDates.forEach((pastDateKey) => {
+          const pastSheet = state.dailySheets[pastDateKey];
+          if (!pastSheet || !pastSheet.tasks) return;
+
+          pastSheet.tasks.forEach((pastTask) => {
+            if (!pastTask.isCompleted) {
+              const alreadyPresent = newTasks.some(
+                (t) =>
+                  t.originalTaskId === pastTask.id ||
+                  (t.title === pastTask.title && t.subjectId === pastTask.subjectId)
+              );
+
+              if (!alreadyPresent) {
+                hasNewRollovers = true;
+                newTasks.push({
+                  id: `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}` as EntityId,
+                  date: targetDate,
+                  subjectId: pastTask.subjectId,
+                  title: pastTask.title,
+                  isCompleted: false,
+                  order: newTasks.length,
+                  isRolledOver: true,
+                  originalDate: pastTask.originalDate ?? (pastDateKey as DateString),
+                  originalTaskId: pastTask.id,
+                });
+              }
+            }
+          });
+        });
+
+        if (hasNewRollovers) {
+          const updatedSheet: DailySheet = {
+            ...currentSheet,
+            tasks: newTasks,
+          };
+          set((prev) => ({
+            dailySheets: {
+              ...prev.dailySheets,
+              [targetDate]: updatedSheet,
+            },
+          }));
+          scheduleSaveToRust(updatedSheet);
+        }
+      },
+
       createSheetIfNotExists: (date: DateString): DailySheet => {
         const state = get();
         if (state.dailySheets[date]) {
+          get().rolloverUnfinishedTasks(date);
           return state.dailySheets[date];
         }
 
@@ -126,6 +193,7 @@ export const usePlannerStore = create<PlannerStore>()(
           },
         }));
         scheduleSaveToRust(newSheet);
+        get().rolloverUnfinishedTasks(date);
         return newSheet;
       },
 
@@ -210,16 +278,26 @@ export const usePlannerStore = create<PlannerStore>()(
           const sheet = prev.dailySheets[date];
           if (!sheet) return prev;
 
+          const targetTask = sheet.tasks.find((t) => t.id === taskId);
           const updatedTasks = sheet.tasks.map((t) =>
             t.id === taskId ? { ...t, isCompleted: !t.isCompleted } : t
           );
           const updated = { ...sheet, tasks: updatedTasks };
           scheduleSaveToRust(updated);
+
+          const newDailySheets = { ...prev.dailySheets, [date]: updated };
+          if (targetTask?.originalTaskId && targetTask?.originalDate && newDailySheets[targetTask.originalDate]) {
+            const origSheet = newDailySheets[targetTask.originalDate];
+            const origTasks = origSheet.tasks.map((ot) =>
+              ot.id === targetTask.originalTaskId ? { ...ot, isCompleted: !targetTask.isCompleted } : ot
+            );
+            const updatedOrigSheet = { ...origSheet, tasks: origTasks };
+            newDailySheets[targetTask.originalDate] = updatedOrigSheet;
+            scheduleSaveToRust(updatedOrigSheet);
+          }
+
           return {
-            dailySheets: {
-              ...prev.dailySheets,
-              [date]: updated,
-            },
+            dailySheets: newDailySheets,
           };
         });
       },

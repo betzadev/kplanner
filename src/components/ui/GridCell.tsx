@@ -38,7 +38,7 @@ export const GridCell = memo(function GridCell({
       data-tenmin={tenMinIndex}
       onMouseDown={(e) => onMouseDown?.(hour, tenMinIndex, e)}
       onMouseEnter={(e) => onMouseEnter?.(hour, tenMinIndex, e)}
-      className={`relative h-[20px] sm:h-[18px] flex-1 min-w-[28px] sm:min-w-[26px] border-r border-b border-slate-200 select-none cursor-pointer transition-colors ${
+      className={`relative h-[20px] sm:h-[18px] flex-1 min-w-[28px] sm:min-w-[26px] border-r border-b border-slate-200 dark:border-slate-800/80 select-none cursor-pointer transition-colors ${
         isCurrent ? 'ring-1.5 ring-blue-500 ring-inset z-10' : ''
       }`}
       title={`${String(hour).padStart(2, '0')}:${tenMinIndex * 10} - ${tenMinIndex * 10 + 10}m`}

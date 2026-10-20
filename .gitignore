@@ -12,6 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Environment variables & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.db
+*.sqlite
+
+# Rust & Tauri builds
+src-tauri/target
+src-tauri/gen/android
+*.apk
+*.aab
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

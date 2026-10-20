@@ -18,7 +18,7 @@ export function ColorCircle({
       type="button"
       onClick={onPress}
       className={`relative inline-flex items-center justify-center rounded-full transition-all cursor-pointer ${
-        isSelected ? 'ring-2 ring-slate-800 ring-offset-1' : 'hover:scale-105'
+        isSelected ? 'ring-2 ring-slate-900 dark:ring-white ring-offset-1 ring-offset-white dark:ring-offset-slate-900' : 'hover:scale-105'
       } ${className}`}
       style={{
         width: size,
@@ -29,7 +29,7 @@ export function ColorCircle({
     >
       {isSelected && (
         <span
-          className="rounded-full bg-slate-900"
+          className="rounded-full bg-slate-900 dark:bg-white"
           style={{ width: Math.max(4, size / 3), height: Math.max(4, size / 3) }}
         />
       )}

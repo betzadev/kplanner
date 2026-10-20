@@ -5,7 +5,7 @@ import { useTimeGrid } from '../../hooks/useTimeGrid';
 import { useSubjectStore } from '../../store/useSubjectStore';
 import { isCurrentBlock, toDateString } from '../../utils/timeSlotMapper';
 import { triggerHaptic } from '../../utils/haptics';
-import { Paintbrush, Hand } from 'lucide-react';
+import { Paintbrush, Hand, HelpCircle } from 'lucide-react';
 
 interface TenMinGridProps {
   date: DateString;
@@ -15,6 +15,7 @@ interface TenMinGridProps {
 export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGridProps) {
   const [startHour, setStartHour] = useState<HourValue>(defaultStartHour);
   const [touchMode, setTouchMode] = useState<'paint' | 'scroll'>('paint');
+  const [showExplanation, setShowExplanation] = useState(false);
   const { paintCell, paintRange, useCellState } = useTimeGrid(date);
   const subjects = useSubjectStore((state) => state.subjects);
   const selectedSubjectId = useSubjectStore((state) => state.selectedSubjectId);
@@ -116,7 +117,7 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
       isInteractingRef.current = true;
       draggedCellsRef.current.clear();
 
-      const key = `${h}-${t}`;
+      const key = `${h}-${t}` as const;
       draggedCellsRef.current.set(key, { hour: h, tenMinIndex: t });
 
       paintCell(h, t, selectedSubjectId, null);
@@ -127,7 +128,7 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isInteractingRef.current || touchMode !== 'paint') return;
 
-    // Prevent scrolling while actively painting
+    // Prevent scrolling while actively painting in Paint mode
     if (e.cancelable) {
       e.preventDefault();
     }
@@ -164,33 +165,43 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
   };
 
   return (
-    <div className="bg-white border border-slate-300 rounded-lg p-2 sm:p-3 shadow-xs select-none w-full max-w-md mx-auto">
+    <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border border-[#C2D8FC]/60 dark:border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xs select-none w-full max-w-md mx-auto transition-colors">
       {/* Mobile Top Controls Bar */}
-      <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-200">
+      <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-[#E4EDFC] dark:border-slate-800">
         <div>
-          <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
-            10-Min Grid
-          </span>
-          <span className="text-[9px] text-slate-400">
-            {selectedSubjectId ? 'Touch & drag to paint' : 'Select a subject first'}
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+              10-Min Grid
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowExplanation(!showExplanation)}
+              className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 p-0.5 rounded cursor-pointer"
+              title="What is Paint vs Scroll?"
+            >
+              <HelpCircle size={12} />
+            </button>
+          </div>
+          <span className="text-[9px] text-slate-400 dark:text-slate-500">
+            {selectedSubjectId ? 'Drag across cells to paint' : 'Select a subject from palette first'}
           </span>
         </div>
 
         <div className="flex items-center gap-1.5">
-          {/* Touch Mode Toggle for Mobile Ergonomics */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-md border border-slate-200">
+          {/* Touch Mode Toggle for Mobile: Paint vs Scroll */}
+          <div className="flex items-center bg-[#E4EDFC]/80 dark:bg-slate-800 p-0.5 rounded-xl border border-[#C2D8FC] dark:border-slate-700">
             <button
               type="button"
               onClick={() => {
                 setTouchMode('paint');
                 triggerHaptic('light');
               }}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors ${
                 touchMode === 'paint'
-                  ? 'bg-slate-800 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
-              title="Paint Mode: Drag across cells to fill"
+              title="Paint Mode: touching or dragging colors the study time blocks"
             >
               <Paintbrush size={11} />
               <span>Paint</span>
@@ -201,12 +212,12 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
                 setTouchMode('scroll');
                 triggerHaptic('light');
               }}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold transition-all ${
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors ${
                 touchMode === 'scroll'
-                  ? 'bg-slate-800 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
-              title="Scroll Mode: Scroll without painting"
+              title="Scroll Mode: touching slides the screen without accidentally coloring blocks"
             >
               <Hand size={11} />
               <span>Scroll</span>
@@ -220,7 +231,7 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
               setStartHour(Number(e.target.value) as HourValue);
               triggerHaptic('light');
             }}
-            className="text-[10px] font-bold bg-slate-100 border border-slate-200 rounded px-1.5 py-1 text-slate-700"
+            className="text-[10px] font-bold bg-white/90 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-1.5 py-1 text-slate-700 dark:text-slate-200 cursor-pointer"
             title="Starting hour"
           >
             <option value={0}>00h</option>
@@ -233,25 +244,40 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
         </div>
       </div>
 
+      {/* Explanatory Info Card when Help icon is clicked */}
+      {showExplanation && (
+        <div className="mb-2 p-2 rounded-xl bg-[#E4EDFC] dark:bg-slate-800/90 border border-[#9FC6FC] dark:border-slate-700 text-[10px] text-slate-700 dark:text-slate-300 leading-snug space-y-1">
+          <div className="font-bold flex items-center gap-1 text-blue-900 dark:text-[#9FC6FC]">
+            <span>Paint vs Scroll:</span>
+          </div>
+          <p>
+            • <strong>Paint</strong>: Tu dedo colorea los bloques de 10 min de estudio al deslizarlo sobre la cuadrícula.
+          </p>
+          <p>
+            • <strong>Scroll</strong>: Tu dedo desplaza la pantalla arriba/abajo libremente sin pintar accidentalmente celdas de tiempo.
+          </p>
+        </div>
+      )}
+
       {/* Grid Table */}
       <div
         ref={gridContainerRef}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`border border-slate-300 rounded overflow-hidden bg-white w-full ${
+        className={`border border-[#C2D8FC]/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white/90 dark:bg-slate-950 w-full ${
           touchMode === 'paint' ? 'touch-none' : 'touch-auto'
         }`}
       >
         {/* Header Row: Column Labels 10m to 60m */}
-        <div className="flex bg-slate-100 border-b border-slate-300">
-          <div className="w-[34px] sm:w-[32px] border-r border-slate-300 text-[9px] font-extrabold text-slate-500 flex items-center justify-center py-1">
+        <div className="flex bg-[#E4EDFC]/60 dark:bg-slate-800/80 border-b border-[#C2D8FC]/80 dark:border-slate-800">
+          <div className="w-[34px] sm:w-[32px] border-r border-[#C2D8FC]/80 dark:border-slate-800 text-[9px] font-extrabold text-blue-800 dark:text-slate-400 flex items-center justify-center py-1">
             H
           </div>
           {[10, 20, 30, 40, 50, 60].map((col) => (
             <div
               key={col}
-              className="flex-1 border-r border-slate-200 last:border-r-0 text-[9px] sm:text-[8px] font-bold text-slate-500 text-center py-1 font-mono"
+              className="flex-1 border-r border-[#C2D8FC]/80 dark:border-slate-800 last:border-r-0 text-[9px] sm:text-[8px] font-bold text-slate-600 dark:text-slate-400 text-center py-1 font-mono"
             >
               {col}
             </div>
@@ -259,10 +285,10 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
         </div>
 
         {/* 24 Hour Rows */}
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-[#E4EDFC]/60 dark:divide-slate-800/80">
           {hours.map((hour) => (
             <div key={hour} className="flex h-[20px] sm:h-[18px]">
-              <div className="w-[34px] sm:w-[32px] border-r border-slate-300 bg-slate-50 flex items-center justify-center text-[10px] sm:text-[9px] font-bold text-slate-600 font-mono">
+              <div className="w-[34px] sm:w-[32px] border-r border-[#C2D8FC]/80 dark:border-slate-800 bg-[#F0F5FD] dark:bg-slate-900 flex items-center justify-center text-[10px] sm:text-[9px] font-bold text-slate-700 dark:text-slate-400 font-mono">
                 {String(hour).padStart(2, '0')}
               </div>
               {([0, 1, 2, 3, 4, 5] as TenMinuteIndex[]).map((tIdx) => (

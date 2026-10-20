@@ -11,10 +11,10 @@ export function CheckBox({ checked, onToggle, size = 18 }: CheckBoxProps) {
     <button
       type="button"
       onClick={onToggle}
-      className={`inline-flex items-center justify-center rounded transition-colors cursor-pointer border ${
+      className={`inline-flex items-center justify-center rounded-md transition-all cursor-pointer border ${
         checked
-          ? 'bg-slate-100 border-slate-600 text-slate-800'
-          : 'bg-white border-slate-300 hover:border-slate-400'
+          ? 'bg-slate-900 border-slate-900 text-white dark:bg-white dark:border-white dark:text-slate-900 shadow-2xs'
+          : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
       }`}
       style={{ width: size, height: size }}
       aria-checked={checked}

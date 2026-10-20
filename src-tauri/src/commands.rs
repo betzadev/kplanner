@@ -1,6 +1,9 @@
 use crate::models::{DailySheet, SubjectItem, TimerConfig};
 use crate::storage::StorageManager;
+use crate::turso::TursoManager;
+use std::sync::Arc;
 use tauri::State;
+use tokio::sync::Mutex;
 
 #[tauri::command]
 pub fn load_daily_sheet(storage: State<'_, StorageManager>, date: String) -> DailySheet {
@@ -54,4 +57,17 @@ pub fn export_data(storage: State<'_, StorageManager>) -> Result<String, String>
 #[tauri::command]
 pub fn import_data(storage: State<'_, StorageManager>, json: String) -> Result<(), String> {
     storage.import_json(&json)
+}
+
+/// Comando Tauri para sincronización nativa con la base de datos Turso
+#[tauri::command]
+pub async fn sync_turso_database(
+    turso: State<'_, Arc<Mutex<Option<TursoManager>>>>,
+) -> Result<usize, String> {
+    let guard = turso.lock().await;
+    if let Some(ref manager) = *guard {
+        manager.sync().await.map_err(|e| e.to_string())
+    } else {
+        Err("Turso database manager not initialized".to_string())
+    }
 }

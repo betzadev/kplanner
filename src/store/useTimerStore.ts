@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import {
   EntityId,
   PomodoroPhase,
@@ -8,9 +7,10 @@ import {
   TimerState,
   UnixTimestampMs,
 } from '../types';
-import { toDateString, dateToBlockIndex } from '../utils/timeSlotMapper';
-import { usePlannerStore } from './usePlannerStore';
 import { tauriApi } from '../services/tauriApi';
+import { usePlannerStore } from './usePlannerStore';
+import { useGamificationStore } from './useGamificationStore';
+import { dateToBlockIndex, toDateString, buildGridCellKey } from '../utils/timeSlotMapper';
 
 export interface TimerStoreState {
   timerState: TimerState;
@@ -29,7 +29,10 @@ export interface TimerStoreActions {
   setTask: (taskId: EntityId | null) => void;
   updateConfig: (configUpdates: Partial<TimerConfig>) => void;
   transitionPomodoroPhase: () => void;
+  skipPomodoroPhase: () => void;
+  previousPomodoroPhase: () => void;
   syncCurrentTimeToGrid: () => void;
+  getCurrentTargetDurationMs: () => number;
 }
 
 export type TimerStore = TimerStoreState & TimerStoreActions;
@@ -46,7 +49,7 @@ const DEFAULT_TIMER_CONFIG: TimerConfig = {
 
 const INITIAL_TIMER_STATE: TimerState = {
   status: 'idle',
-  mode: 'stopwatch',
+  mode: 'pomodoro',
   startTimestamp: null,
   pausedTimestamp: null,
   accumulatedMs: 0,
@@ -57,215 +60,271 @@ const INITIAL_TIMER_STATE: TimerState = {
 };
 
 function playChime() {
-  if (typeof window === 'undefined') return;
   try {
-    const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
 
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
 
     osc.connect(gain);
-    gain.connect(audioCtx.destination);
+    gain.connect(ctx.destination);
 
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.8);
+    osc.stop(ctx.currentTime + 0.6);
   } catch {
-    // Audio context may require user interaction
+    // Audio context not allowed or blocked
   }
 }
 
-export const useTimerStore = create<TimerStore>()(
-  persist(
-    (set, get) => ({
-      timerState: INITIAL_TIMER_STATE,
-      timerConfig: DEFAULT_TIMER_CONFIG,
+export const useTimerStore = create<TimerStore>((set, get) => ({
+  timerState: INITIAL_TIMER_STATE,
+  timerConfig: DEFAULT_TIMER_CONFIG,
 
-      initFromRust: async () => {
-        const loaded = await tauriApi.loadTimerConfig();
-        if (loaded) {
-          set({ timerConfig: loaded });
-        }
-      },
-
-      startTimer: (subjectId: EntityId, taskId: EntityId | null = null) => {
-        const now = Date.now() as UnixTimestampMs;
-        set({
-          timerState: {
-            ...get().timerState,
-            status: 'running',
-            startTimestamp: now,
-            pausedTimestamp: null,
-            accumulatedMs: 0,
-            currentSubjectId: subjectId,
-            currentTaskId: taskId,
-          },
-        });
-        get().syncCurrentTimeToGrid();
-      },
-
-      pauseTimer: () => {
-        const { timerState } = get();
-        if (timerState.status !== 'running' || !timerState.startTimestamp) return;
-
-        const now = Date.now() as UnixTimestampMs;
-        const currentElapsed = now - timerState.startTimestamp;
-
-        set({
-          timerState: {
-            ...timerState,
-            status: 'paused',
-            pausedTimestamp: now,
-            accumulatedMs: timerState.accumulatedMs + currentElapsed,
-            startTimestamp: null,
-          },
-        });
-      },
-
-      resumeTimer: () => {
-        const { timerState } = get();
-        if (timerState.status !== 'paused') return;
-
-        const now = Date.now() as UnixTimestampMs;
-        set({
-          timerState: {
-            ...timerState,
-            status: 'running',
-            startTimestamp: now,
-            pausedTimestamp: null,
-          },
-        });
-      },
-
-      resetTimer: () => {
-        set({
-          timerState: {
-            ...INITIAL_TIMER_STATE,
-            mode: get().timerState.mode,
-            currentSubjectId: get().timerState.currentSubjectId,
-          },
-        });
-      },
-
-      tick: () => {
-        const { timerState, timerConfig } = get();
-        if (timerState.status !== 'running' || !timerState.startTimestamp) return;
-
-        if (timerState.mode === 'stopwatch' || timerState.pomodoroPhase === 'focus') {
-          get().syncCurrentTimeToGrid();
-        }
-
-        if (timerState.mode === 'pomodoro') {
-          const now = Date.now() as UnixTimestampMs;
-          const totalElapsedMs = timerState.accumulatedMs + (now - timerState.startTimestamp);
-
-          let targetDurationMs = 0;
-          if (timerState.pomodoroPhase === 'focus') {
-            targetDurationMs = timerConfig.pomodoroWorkMinutes * 60 * 1000;
-          } else if (timerState.pomodoroPhase === 'shortBreak') {
-            targetDurationMs = timerConfig.pomodoroShortBreakMinutes * 60 * 1000;
-          } else {
-            targetDurationMs = timerConfig.pomodoroLongBreakMinutes * 60 * 1000;
-          }
-
-          if (totalElapsedMs >= targetDurationMs) {
-            get().transitionPomodoroPhase();
-          }
-        }
-      },
-
-      transitionPomodoroPhase: () => {
-        const { timerState, timerConfig } = get();
-        let nextPhase: PomodoroPhase = 'focus';
-        let completedCycles = timerState.completedPomodorosInCycle;
-
-        if (timerState.pomodoroPhase === 'focus') {
-          completedCycles += 1;
-          if (completedCycles % timerConfig.longBreakInterval === 0) {
-            nextPhase = 'longBreak';
-          } else {
-            nextPhase = 'shortBreak';
-          }
-        } else {
-          nextPhase = 'focus';
-        }
-
-        if (timerConfig.soundAlertsEnabled) {
-          playChime();
-        }
-
-        const autoStart =
-          nextPhase === 'focus' ? timerConfig.autoStartPomodoros : timerConfig.autoStartBreaks;
-        const now = Date.now() as UnixTimestampMs;
-
-        set({
-          timerState: {
-            ...timerState,
-            status: autoStart ? 'running' : 'idle',
-            pomodoroPhase: nextPhase,
-            completedPomodorosInCycle: completedCycles,
-            startTimestamp: autoStart ? now : null,
-            pausedTimestamp: null,
-            accumulatedMs: 0,
-          },
-        });
-      },
-
-      setMode: (mode: TimerMode) => {
-        get().resetTimer();
-        set((state) => ({
-          timerState: { ...state.timerState, mode },
-        }));
-      },
-
-      setSubject: (subjectId: EntityId) => {
-        set((state) => ({
-          timerState: { ...state.timerState, currentSubjectId: subjectId },
-        }));
-      },
-
-      setTask: (taskId: EntityId | null) => {
-        set((state) => ({
-          timerState: { ...state.timerState, currentTaskId: taskId },
-        }));
-      },
-
-      updateConfig: (configUpdates: Partial<TimerConfig>) => {
-        set((state) => {
-          const updated = { ...state.timerConfig, ...configUpdates };
-          tauriApi.saveTimerConfig(updated);
-          return { timerConfig: updated };
-        });
-      },
-
-      syncCurrentTimeToGrid: () => {
-        const { timerState } = get();
-        if (!timerState.currentSubjectId) return;
-
-        const now = new Date();
-        const dateStr = toDateString(now);
-        const { hour, tenMinIndex } = dateToBlockIndex(now);
-
-        usePlannerStore.getState().paintCell(
-          dateStr,
-          hour,
-          tenMinIndex,
-          timerState.currentSubjectId,
-          timerState.currentTaskId,
-          1.0
-        );
-      },
-    }),
-    {
-      name: 'korean_planner_timer_state',
-      partialize: (state) => ({
-        timerConfig: state.timerConfig,
-      }),
+  initFromRust: async () => {
+    const rustConfig = await tauriApi.loadTimerConfig();
+    if (rustConfig) {
+      set({ timerConfig: rustConfig });
     }
-  )
-);
+  },
+
+  getCurrentTargetDurationMs: () => {
+    const { timerState, timerConfig } = get();
+    if (timerState.mode === 'stopwatch') return 0;
+
+    switch (timerState.pomodoroPhase) {
+      case 'focus':
+        return timerConfig.pomodoroWorkMinutes * 60 * 1000;
+      case 'shortBreak':
+        return timerConfig.pomodoroShortBreakMinutes * 60 * 1000;
+      case 'longBreak':
+        return timerConfig.pomodoroLongBreakMinutes * 60 * 1000;
+      default:
+        return 25 * 60 * 1000;
+    }
+  },
+
+  startTimer: (subjectId: EntityId, taskId: EntityId | null = null) => {
+    const now = Date.now() as UnixTimestampMs;
+    set((state) => ({
+      timerState: {
+        ...state.timerState,
+        status: 'running',
+        startTimestamp: now,
+        pausedTimestamp: null,
+        accumulatedMs: 0,
+        currentSubjectId: subjectId,
+        currentTaskId: taskId,
+      },
+    }));
+  },
+
+  pauseTimer: () => {
+    const now = Date.now() as UnixTimestampMs;
+    const { timerState } = get();
+
+    if (timerState.status !== 'running') return;
+
+    const sessionElapsed = timerState.startTimestamp ? now - timerState.startTimestamp : 0;
+    const newAccumulated = timerState.accumulatedMs + sessionElapsed;
+
+    set({
+      timerState: {
+        ...timerState,
+        status: 'paused',
+        pausedTimestamp: now,
+        accumulatedMs: newAccumulated,
+        startTimestamp: null,
+      },
+    });
+
+    get().syncCurrentTimeToGrid();
+  },
+
+  resumeTimer: () => {
+    const now = Date.now() as UnixTimestampMs;
+    const { timerState } = get();
+
+    if (timerState.status !== 'paused') return;
+
+    set({
+      timerState: {
+        ...timerState,
+        status: 'running',
+        startTimestamp: now,
+        pausedTimestamp: null,
+      },
+    });
+  },
+
+  resetTimer: () => {
+    get().syncCurrentTimeToGrid();
+
+    set((state) => ({
+      timerState: {
+        ...state.timerState,
+        status: 'idle',
+        startTimestamp: null,
+        pausedTimestamp: null,
+        accumulatedMs: 0,
+      },
+    }));
+  },
+
+  tick: () => {
+    const { timerState } = get();
+    if (timerState.status !== 'running') return;
+
+    const now = Date.now() as UnixTimestampMs;
+    const currentRun = timerState.startTimestamp ? now - timerState.startTimestamp : 0;
+    const totalElapsedMs = timerState.accumulatedMs + currentRun;
+
+    get().syncCurrentTimeToGrid();
+
+    if (timerState.mode === 'pomodoro') {
+      const targetDurationMs = get().getCurrentTargetDurationMs();
+
+      if (totalElapsedMs >= targetDurationMs) {
+        get().transitionPomodoroPhase();
+      }
+    }
+  },
+
+  transitionPomodoroPhase: () => {
+    const { timerState, timerConfig } = get();
+    let nextPhase: PomodoroPhase = 'focus';
+    let completedCycles = timerState.completedPomodorosInCycle;
+
+    if (timerState.pomodoroPhase === 'focus') {
+      completedCycles += 1;
+      useGamificationStore.getState().awardXp(25);
+      useGamificationStore.getState().awardGems(5);
+
+      if (completedCycles % timerConfig.longBreakInterval === 0) {
+        nextPhase = 'longBreak';
+      } else {
+        nextPhase = 'shortBreak';
+      }
+    } else {
+      nextPhase = 'focus';
+    }
+
+    if (timerConfig.soundAlertsEnabled) {
+      playChime();
+    }
+
+    const autoStart =
+      nextPhase === 'focus' ? timerConfig.autoStartPomodoros : timerConfig.autoStartBreaks;
+    const now = Date.now() as UnixTimestampMs;
+
+    set({
+      timerState: {
+        ...timerState,
+        status: autoStart ? 'running' : 'idle',
+        pomodoroPhase: nextPhase,
+        completedPomodorosInCycle: completedCycles,
+        startTimestamp: autoStart ? now : null,
+        pausedTimestamp: null,
+        accumulatedMs: 0,
+      },
+    });
+  },
+
+  skipPomodoroPhase: () => {
+    get().transitionPomodoroPhase();
+  },
+
+  previousPomodoroPhase: () => {
+    const { timerState, timerConfig } = get();
+    let prevPhase: PomodoroPhase = 'focus';
+    let cycles = timerState.completedPomodorosInCycle;
+
+    if (timerState.pomodoroPhase === 'shortBreak' || timerState.pomodoroPhase === 'longBreak') {
+      prevPhase = 'focus';
+      if (cycles > 0) cycles -= 1;
+    } else {
+      if (cycles > 0) {
+        if (cycles % timerConfig.longBreakInterval === 0) {
+          prevPhase = 'longBreak';
+        } else {
+          prevPhase = 'shortBreak';
+        }
+      } else {
+        prevPhase = 'focus';
+      }
+    }
+
+    set({
+      timerState: {
+        ...timerState,
+        status: 'idle',
+        pomodoroPhase: prevPhase,
+        completedPomodorosInCycle: Math.max(0, cycles),
+        startTimestamp: null,
+        pausedTimestamp: null,
+        accumulatedMs: 0,
+      },
+    });
+  },
+
+  setMode: (mode: TimerMode) => {
+    set((state) => ({
+      timerState: {
+        ...INITIAL_TIMER_STATE,
+        mode,
+        currentSubjectId: state.timerState.currentSubjectId,
+      },
+    }));
+  },
+
+  setSubject: (subjectId: EntityId) => {
+    set((state) => ({
+      timerState: { ...state.timerState, currentSubjectId: subjectId },
+    }));
+  },
+
+  setTask: (taskId: EntityId | null) => {
+    set((state) => ({
+      timerState: { ...state.timerState, currentTaskId: taskId },
+    }));
+  },
+
+  updateConfig: (configUpdates: Partial<TimerConfig>) => {
+    set((state) => {
+      const updated = { ...state.timerConfig, ...configUpdates };
+      tauriApi.saveTimerConfig(updated);
+      return { timerConfig: updated };
+    });
+  },
+
+  syncCurrentTimeToGrid: () => {
+    const { timerState } = get();
+    if (timerState.status !== 'running' || !timerState.currentSubjectId) return;
+    if (timerState.mode === 'pomodoro' && timerState.pomodoroPhase !== 'focus') return;
+
+    const now = new Date();
+    const coord = dateToBlockIndex(now);
+    const todayStr = toDateString(now);
+
+    const plannerStore = usePlannerStore.getState();
+    const currentSheet = plannerStore.dailySheets[todayStr];
+    const key = buildGridCellKey(coord.hour, coord.tenMinIndex);
+    const existingBlock = currentSheet?.timeGrid[key];
+
+    if (!existingBlock || existingBlock.subjectId !== timerState.currentSubjectId) {
+      plannerStore.paintCell(
+        todayStr,
+        coord.hour,
+        coord.tenMinIndex,
+        timerState.currentSubjectId,
+        timerState.currentTaskId,
+        1.0
+      );
+    }
+  },
+}));

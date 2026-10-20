@@ -1,22 +1,39 @@
 import { useEffect, useState } from 'react';
 import { useTimerStore } from '../store/useTimerStore';
 import { formatTimerMs } from '../utils/timeSlotMapper';
-import { UnixTimestampMs } from '../types';
 
 export function useStudyTimer() {
-  const { timerState, startTimer, pauseTimer, resumeTimer, resetTimer, tick } = useTimerStore();
-  const [displayMs, setDisplayMs] = useState<number>(0);
+  const timerState = useTimerStore((state) => state.timerState);
+  const timerConfig = useTimerStore((state) => state.timerConfig);
+  const startTimer = useTimerStore((state) => state.startTimer);
+  const pauseTimer = useTimerStore((state) => state.pauseTimer);
+  const resumeTimer = useTimerStore((state) => state.resumeTimer);
+  const resetTimer = useTimerStore((state) => state.resetTimer);
+  const tick = useTimerStore((state) => state.tick);
+  const skipPomodoroPhase = useTimerStore((state) => state.skipPomodoroPhase);
+  const previousPomodoroPhase = useTimerStore((state) => state.previousPomodoroPhase);
+  const getCurrentTargetDurationMs = useTimerStore((state) => state.getCurrentTargetDurationMs);
+
+  const [currentMs, setCurrentMs] = useState<number>(0);
 
   useEffect(() => {
+    const updateTime = () => {
+      const now = Date.now();
+      const currentRun =
+        timerState.status === 'running' && timerState.startTimestamp
+          ? now - timerState.startTimestamp
+          : 0;
+      setCurrentMs(timerState.accumulatedMs + currentRun);
+    };
+
+    updateTime();
+
     if (timerState.status !== 'running') {
-      setDisplayMs(timerState.accumulatedMs);
       return;
     }
 
     const interval = setInterval(() => {
-      const now = Date.now() as UnixTimestampMs;
-      const runningDelta = timerState.startTimestamp ? now - timerState.startTimestamp : 0;
-      setDisplayMs(timerState.accumulatedMs + runningDelta);
+      updateTime();
       tick();
     }, 1000);
 
@@ -34,19 +51,34 @@ export function useStudyTimer() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [timerState.status, tick]);
 
-  const formatted = formatTimerMs(displayMs);
+  // Pomodoro countdown calculations
+  const targetDurationMs = getCurrentTargetDurationMs();
+  const isPomodoro = timerState.mode === 'pomodoro';
+  const remainingMs = isPomodoro ? Math.max(0, targetDurationMs - currentMs) : currentMs;
+  const progressPercent = isPomodoro
+    ? Math.min(100, Math.max(0, (currentMs / targetDurationMs) * 100))
+    : 100;
+
+  const formatted = formatTimerMs(remainingMs);
 
   return {
     status: timerState.status,
     mode: timerState.mode,
     pomodoroPhase: timerState.pomodoroPhase,
+    completedPomodorosInCycle: timerState.completedPomodorosInCycle,
+    longBreakInterval: timerConfig.longBreakInterval,
     currentSubjectId: timerState.currentSubjectId,
     currentTaskId: timerState.currentTaskId,
-    elapsedMs: displayMs,
+    elapsedMs: currentMs,
+    remainingMs,
+    targetDurationMs,
+    progressPercent,
     formatted,
     startTimer,
     pauseTimer,
     resumeTimer,
     resetTimer,
+    skipPomodoroPhase,
+    previousPomodoroPhase,
   };
 }

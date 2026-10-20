@@ -18,17 +18,19 @@ export function SubjectLegend({ onEditSubject }: SubjectLegendProps) {
   };
 
   return (
-    <div className="bg-white border border-slate-300 rounded-lg p-2.5 shadow-xs">
-      <div className="flex items-center justify-between mb-1.5 px-0.5">
-        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-          Subject Palette / 과목 선택
+    <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-sm border border-[#C2D8FC]/60 dark:border-slate-800 rounded-3xl p-3 sm:p-4 shadow-sm transition-colors space-y-2">
+      {/* Header with Title and hint */}
+      <div className="flex items-center justify-between px-1">
+        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+          Subject Palette
         </span>
-        <span className="text-[10px] text-slate-400 font-medium">
-          {selectedSubjectId ? 'Paintbrush active' : 'Tap to select'}
+        <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">
+          {selectedSubjectId ? 'Ready to paint grid' : 'Tap a subject to paint'}
         </span>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin smooth-scroll">
+      {/* Subjects horizontal list */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 scrollbar-thin smooth-scroll">
         {subjects.map((item) => {
           const isSelected = item.id === selectedSubjectId;
           return (
@@ -37,14 +39,14 @@ export function SubjectLegend({ onEditSubject }: SubjectLegendProps) {
               type="button"
               onClick={() => handleSelect(item.id)}
               onDoubleClick={() => onEditSubject?.(item.id)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 active:scale-95 ${
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shrink-0 active:scale-95 ${
                 isSelected
-                  ? 'border-slate-800 bg-slate-100 text-slate-900 shadow-xs ring-1 ring-slate-800'
-                  : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                  ? 'border-blue-600 dark:border-[#9FC6FC] bg-[#E4EDFC] dark:bg-blue-950/80 text-blue-900 dark:text-white ring-1 ring-blue-500 shadow-xs'
+                  : 'border-[#E4EDFC] dark:border-slate-800 bg-white/90 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 hover:bg-[#E4EDFC]/50 dark:hover:bg-slate-800'
               }`}
             >
-              <ColorCircle color={item.color} size={15} isSelected={isSelected} />
-              <span className="truncate max-w-[130px]">{item.name}</span>
+              <ColorCircle color={item.color} size={14} isSelected={isSelected} />
+              <span className="truncate max-w-[120px] select-none text-xs">{item.name}</span>
             </button>
           );
         })}

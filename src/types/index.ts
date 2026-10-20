@@ -36,6 +36,9 @@ export interface PlannerTask {
   title: string;
   isCompleted: boolean;
   order: number;
+  isRolledOver?: boolean;
+  originalDate?: DateString;
+  originalTaskId?: EntityId;
 }
 
 export interface TimeBlock {
@@ -82,14 +85,14 @@ export interface TimerConfig {
 }
 
 export const DEFAULT_PASTEL_PALETTE: readonly HexColor[] = [
-  '#A7D8DE', // Pastel Mint
-  '#F6A6A1', // Pastel Coral
-  '#FBE8A6', // Pastel Lemon
-  '#B4D4F0', // Pastel Sky
-  '#D5C6E8', // Pastel Lilac
-  '#F8C291', // Pastel Peach
-  '#F3B0C3', // Pastel Rose
-  '#C1E1C1', // Pastel Sage
+  '#C2D8FC', // Soft Dreamy Sky Blue
+  '#9FC6FC', // Dreamy Periwinkle Accent
+  '#E4EDFC', // Cloud Mist Tint
+  '#FDE2E4', // Soft Sakura Pink
+  '#E2ECE9', // Sage Mist Green
+  '#FFF1C5', // Buttercream Yellow
+  '#DFCCF1', // Lavender Dream
+  '#FCE1D4', // Warm Peach
 ] as const;
 
 export type ActiveTab = 'planner' | 'timer' | 'analytics' | 'settings';

@@ -21,9 +21,9 @@ export interface SubjectStoreActions {
 export type SubjectStore = SubjectStoreState & SubjectStoreActions;
 
 export const INITIAL_DEFAULT_SUBJECTS: SubjectLegendItem[] = [
-  { id: 'subj_korean' as EntityId, name: 'Korean Language', color: DEFAULT_PASTEL_PALETTE[0] as HexColor, slotIndex: 0 },
+  { id: 'subj_lit' as EntityId, name: 'Language Arts', color: DEFAULT_PASTEL_PALETTE[0] as HexColor, slotIndex: 0 },
   { id: 'subj_math' as EntityId, name: 'Mathematics', color: DEFAULT_PASTEL_PALETTE[1] as HexColor, slotIndex: 1 },
-  { id: 'subj_english' as EntityId, name: 'English Literature', color: DEFAULT_PASTEL_PALETTE[2] as HexColor, slotIndex: 2 },
+  { id: 'subj_english' as EntityId, name: 'Literature', color: DEFAULT_PASTEL_PALETTE[2] as HexColor, slotIndex: 2 },
   { id: 'subj_science' as EntityId, name: 'Natural Science', color: DEFAULT_PASTEL_PALETTE[3] as HexColor, slotIndex: 3 },
   { id: 'subj_history' as EntityId, name: 'World History', color: DEFAULT_PASTEL_PALETTE[4] as HexColor, slotIndex: 4 },
   { id: 'subj_cs' as EntityId, name: 'Computer Science', color: DEFAULT_PASTEL_PALETTE[5] as HexColor, slotIndex: 5 },
@@ -40,25 +40,32 @@ export const useSubjectStore = create<SubjectStore>()(
       initFromRust: async () => {
         const loaded = await tauriApi.loadSubjects();
         if (loaded && loaded.length > 0) {
-          set({ subjects: loaded });
+          // If any legacy subject has 'Korean Language', update name cleanly to 'Language Arts'
+          const cleaned = loaded.map((s) =>
+            s.name === 'Korean Language' ? { ...s, name: 'Language Arts' } : s
+          );
+          set({ subjects: cleaned });
+          if (!get().selectedSubjectId && cleaned.length > 0) {
+            set({ selectedSubjectId: cleaned[0].id });
+          }
         }
       },
 
       addSubject: (name: string, color: HexColor): SubjectLegendItem => {
         const current = get().subjects;
         if (current.length >= 8) {
-          throw new Error('Maximum of 8 subjects allowed in Korean Planner Legend');
+          throw new Error('Maximum of 8 subjects allowed in study legend');
         }
 
         const newSubject: SubjectLegendItem = {
           id: `subj_${Date.now()}` as EntityId,
-          name: name.trim(),
+          name: name.trim() || `Subject ${current.length + 1}`,
           color,
           slotIndex: current.length,
         };
 
         const updated = [...current, newSubject];
-        set({ subjects: updated });
+        set({ subjects: updated, selectedSubjectId: newSubject.id });
         tauriApi.saveSubjects(updated);
         return newSubject;
       },

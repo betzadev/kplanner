@@ -58,7 +58,10 @@ export function isCurrentBlock(hour: HourValue, tenMinIndex: TenMinuteIndex, now
   return current.hour === hour && current.tenMinIndex === tenMinIndex;
 }
 
-export function formatStudyDuration(minutes: number, format: 'korean' | 'digital' = 'korean'): string {
+export function formatStudyDuration(
+  minutes: number,
+  format: 'standard' | 'digital' | 'korean' = 'standard'
+): string {
   const cleanMins = Math.max(0, Math.floor(minutes));
   const hours = Math.floor(cleanMins / 60);
   const remainingMins = cleanMins % 60;
@@ -69,7 +72,7 @@ export function formatStudyDuration(minutes: number, format: 'korean' | 'digital
   if (format === 'digital') {
     return `${hh}:${mm}`;
   }
-  return `${hh}H ${mm}M`;
+  return `${hours}h ${remainingMins}m`;
 }
 
 export function formatTimerMs(ms: number): { hours: string; minutes: string; seconds: string } {
