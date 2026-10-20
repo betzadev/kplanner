@@ -34,8 +34,7 @@ jobs:
           fetch-depth: 0
 
       # ============================================================
-      # 2. Diagnostic snapshot BEFORE anything can fail.
-      # Writes to GITHUB_STEP_SUMMARY so it's visible in the Actions UI.
+      # 2. Pre-build diagnostic snapshot to Step Summary
       # ============================================================
       - name: Pre-build diagnostic snapshot
         if: always()
@@ -54,19 +53,14 @@ jobs:
             ls -la
             echo '```'
             echo ""
-            echo "### Search for pnpm-lock.yaml"
-            echo '```'
-            find . -maxdepth 4 -name "pnpm-lock.yaml" 2>/dev/null || echo "(none found)"
-            echo '```'
-            echo ""
-            echo "### package.json (if present)"
+            echo "### package.json"
             echo '```json'
-            cat package.json 2>/dev/null || echo "(not found at repo root)"
+            cat package.json 2>/dev/null || echo "(not found)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ============================================================
-      # 3. Setup Java JDK 17 (Zulu distribution)
+      # 3. Setup Java JDK 17
       # ============================================================
       - name: Setup Java JDK
         uses: actions/setup-java@v4
@@ -75,8 +69,7 @@ jobs:
           java-version: '17'
 
       # ============================================================
-      # 4. Setup Android NDK 27 + required SDK components.
-      # No `set -e` here — every command is individually guarded.
+      # 4. Setup Android NDK 27 + required SDK components
       # ============================================================
       - name: Setup Android NDK and SDK
         run: |
@@ -85,15 +78,12 @@ jobs:
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
 
-          # Accept licenses (best-effort)
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
-          # Install required SDK components (best-effort)
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" "platforms;android-34" "platforms;android-35" \
             "build-tools;34.0.0" "cmake;3.22.1" > /dev/null 2>&1 || true
 
-          # Install pinned NDK with triple fallback
           NDK_PATH="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}"
           if [ ! -d "$NDK_PATH" ]; then
             echo "Installing NDK ${NDK_VERSION}..."
@@ -116,7 +106,7 @@ jobs:
           echo "Configured NDK: $NDK_PATH"
 
       # ============================================================
-      # 5. Setup pnpm (using v4 — battle-tested, no v5 surprises)
+      # 5. Setup pnpm
       # ============================================================
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -124,8 +114,7 @@ jobs:
           version: 10
 
       # ============================================================
-      # 6. Setup Node.js 22 (NO pnpm cache — avoids exit code 2
-      # when pnpm-lock.yaml is missing or out of sync).
+      # 6. Setup Node.js (NO pnpm cache to avoid exit code 2)
       # ============================================================
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -141,21 +130,11 @@ jobs:
           targets: ${{ env.RUST_TARGET }}
 
       # ============================================================
-      # 8. Install JavaScript dependencies.
-      # Uses --no-frozen-lockfile to avoid exit 100 from lockfile
-      # drift. Explicit exit code capture and propagation.
+      # 8. Install JavaScript dependencies (no --frozen-lockfile
+      # to avoid exit 100 from lockfile drift)
       # ============================================================
       - name: Install dependencies
-        run: |
-          echo "=== pnpm version ==="
-          pnpm --version
-          echo "=== node version ==="
-          node --version
-          echo "=== pnpm install --no-frozen-lockfile ==="
-          pnpm install --no-frozen-lockfile
-          INSTALL_EXIT=$?
-          echo "pnpm install exit code: $INSTALL_EXIT"
-          exit $INSTALL_EXIT
+        run: pnpm install --no-frozen-lockfile
 
       # ============================================================
       # 9. Build web frontend
@@ -164,58 +143,69 @@ jobs:
         run: pnpm build
 
       # ============================================================
-      # 10. Ensure Android debug keystore exists (used by both
-      # debug and release-with-debug-signing builds).
+      # 10. Ensure Android debug keystore
       # ============================================================
       - name: Ensure Android Debug Keystore
         run: |
           mkdir -p ~/.android
           if [ ! -f ~/.android/debug.keystore ]; then
             keytool -genkey -v \
-              -keystore ~/.android/debug.keystore \
+              -keystore ~/..android/debug.keystore \
               -storepass android -alias androiddebugkey -keypass android \
               -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
           fi
-          keytool -list -keystore ~/.android/debug.keystore -storepass android | head -5
 
       # ============================================================
-      # 11. Initialize Android project, inject signing config,
-      # and build the APK. No `set -e` so a non-critical sub-step
-      # doesn't abort the build silently.
+      # 11. Tauri Android Init (its own step so failure is
+      # localized and we can capture its log)
       # ============================================================
-      - name: Initialize Android project and build APK
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-          BUILD_TYPE: ${{ github.event.inputs.build_type || 'debug' }}
+      - name: Tauri Android Init
         run: |
-          echo "=== TAURI INFO ==="
-          pnpm tauri info || true
-
-          echo "=== TAURI ANDROID INIT ==="
+          set +e
           if [ ! -d "src-tauri/gen/android/app" ]; then
-            pnpm tauri android init --ci
+            echo "=== Running: pnpm tauri android init --ci ===" | tee tauri-init.log
+            pnpm tauri android init --ci 2>&1 | tee -a tauri-init.log
+            INIT_EXIT=${PIPESTATUS[0]}
+            if [ "$INIT_EXIT" -ne 0 ]; then
+              {
+                echo "## ❌ Tauri Android Init failed (exit $INIT_EXIT)"
+                echo ""
+                echo "### Full init log"
+                echo '```'
+                cat tauri-init.log
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit "$INIT_EXIT"
+            fi
           else
             echo "Android project already initialized."
           fi
 
-          echo "=== WRITE local.properties ==="
+      # ============================================================
+      # 12. Write local.properties (AFTER init, so init can't
+      # overwrite it)
+      # ============================================================
+      - name: Write local.properties
+        run: |
           cat > src-tauri/gen/android/local.properties <<EOF
           sdk.dir=$ANDROID_HOME
           ndk.dir=$NDK_HOME
           EOF
           cat src-tauri/gen/android/local.properties
 
-          echo "=== CHMOD gradlew ==="
+      # ============================================================
+      # 13. Inject debug signing into release buildType
+      # ============================================================
+      - name: Inject signing config
+        run: |
           [ -f "src-tauri/gen/android/gradlew" ] && chmod +x src-tauri/gen/android/gradlew || true
-
-          echo "=== INJECT debug signing into release buildType ==="
-          GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
-          if [ -f "$GRADLE_APP" ]; then
-            python3 << 'PYEOF'
+          python3 << 'PYEOF'
           import pathlib
           p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts")
+          if not p.exists():
+              print("WARNING: build.gradle.kts not found")
+              raise SystemExit(0)
           c = p.read_text()
           if "signingConfig = signingConfigs.getByName(\"debug\")" not in c:
               marker = "getByName(\"release\") {"
@@ -228,89 +218,94 @@ jobs:
           else:
               print("Already injected.")
           PYEOF
-          else
-            echo "WARNING: $GRADLE_APP not found."
-          fi
-
-          echo "=== TAURI ANDROID BUILD ($BUILD_TYPE) ==="
-          if [ "$BUILD_TYPE" = "release" ]; then
-            pnpm tauri android build --apk --target "$RUST_TARGET" --verbose
-          else
-            pnpm tauri android build --debug --apk --target "$RUST_TARGET" --verbose
-          fi
-
-          echo "=== APK OUTPUTS ==="
-          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; || true
 
       # ============================================================
-      # 12. On failure: diagnostic dump to step summary.
-      # Wrapped in subshell + || true so this step itself can
-      # never fail the job.
+      # 14. THE ACTUAL BUILD STEP.
+      # This is where exit code 2 was coming from. We capture
+      # FULL output to tauri-build.log and dump it to Step
+      # Summary on failure.
       # ============================================================
-      - name: Failure diagnostics
-        if: failure()
-        continue-on-error: true
+      - name: Tauri Android Build APK
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          BUILD_TYPE: ${{ github.event.inputs.build_type || 'debug' }}
         run: |
-          {
-            echo "## ❌ Build failed — diagnostic dump"
-            echo ""
-            echo "### Environment"
-            echo '```'
-            env | grep -E "^(ANDROID|NDK|RUST|BUILD_TYPE|TURSO)" | sort
-            echo '```'
-            echo ""
-            echo "### Rust targets installed"
-            echo '```'
-            rustup target list --installed 2>/dev/null || echo "(rustup not available)"
-            echo '```'
-            echo ""
-            echo "### NDK directory"
-            echo '```'
-            ls -la "$NDK_HOME" 2>/dev/null || echo "(NDK_HOME not set or directory missing)"
-            echo '```'
-            echo ""
-            echo "### src-tauri/gen/android tree"
-            echo '```'
-            find src-tauri/gen/android -maxdepth 3 -type f 2>/dev/null | head -50 || echo "(android project not generated)"
-            echo '```'
-            echo ""
-            echo "### local.properties"
-            echo '```'
-            cat src-tauri/gen/android/local.properties 2>/dev/null || echo "(not found)"
-            echo '```'
-            echo ""
-            echo "### build.gradle.kts (signingConfigs block)"
-            echo '```'
-            grep -B 2 -A 30 "signingConfigs" src-tauri/gen/android/app/build.gradle.kts 2>/dev/null || echo "(file not found)"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY" || true
+          # DO NOT use 'set -e' — we need to capture exit code and
+          # write diagnostics before exiting.
+          set +e
+          echo "=== BUILD_TYPE: $BUILD_TYPE ===" | tee tauri-build.log
+          echo "=== RUST_TARGET: $RUST_TARGET ===" | tee -a tauri-build.log
+          echo "=== NDK_HOME: $NDK_HOME ===" | tee -a tauri-build.log
+          echo "=== Command that will run ===" | tee -a tauri-build.log
+          if [ "$BUILD_TYPE" = "release" ]; then
+            echo "pnpm tauri android build --apk --target $RUST_TARGET --verbose" | tee -a tauri-build.log
+          else
+            echo "pnpm tauri android build --debug --apk --target $RUST_TARGET --verbose" | tee -a tauri-build.log
+          fi
+          echo "" | tee -a tauri-build.log
+          echo "=== Output ===" | tee -a tauri-build.log
+          echo "" | tee -a tauri-build.log
+
+          if [ "$BUILD_TYPE" = "release" ]; then
+            pnpm tauri android build --apk --target "$RUST_TARGET" --verbose 2>&1 | tee -a tauri-build.log
+          else
+            pnpm tauri android build --debug --apk --target "$RUST_TARGET" --verbose 2>&1 | tee -a tauri-build.log
+          fi
+          BUILD_EXIT=${PIPESTATUS[0]}
+
+          echo "" | tee -a tauri-build.log
+          echo "=== Build exited with code: $BUILD_EXIT ===" | tee -a tauri-build.log
+
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            {
+              echo "## ❌ Tauri Android Build failed (exit code $BUILD_EXIT)"
+              echo ""
+              echo "**Build type:** $BUILD_TYPE"
+              echo "**NDK:** $NDK_HOME"
+              echo "**Rust target:** $RUST_TARGET"
+              echo ""
+              echo "### Last 400 lines of build output"
+              echo '```'
+              tail -n 400 tauri-build.log 2>/dev/null || echo "(no log file)"
+              echo '```'
+              echo ""
+              echo "### Full log available in artifact \`tauri-build-log\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$BUILD_EXIT"
+          fi
+
+          echo "### ✅ Build succeeded" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### APK outputs" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       # ============================================================
-      # 13. Upload APK artifact (always runs so we get partial
-      # outputs even on failure).
+      # 15. Upload APK artifact (only on success)
       # ============================================================
       - name: Upload APK artifact
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: kplanner-apk
           path: |
             src-tauri/gen/android/app/build/outputs/apk/**/*.apk
-            src-tauri/gen/android/app/build/outputs/apk/**/*.apk.sha256
           if-no-files-found: warn
           retention-days: 30
 
       # ============================================================
-      # 14. Upload full build log artifact (so user can download
-      # it without needing to dig into Actions logs).
+      # 16. Upload build log artifact (always, for diagnostics)
       # ============================================================
-      - name: Upload build log
+      - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-log
+          name: tauri-build-logs
           path: |
-            build.log
+            tauri-init.log
+            tauri-build.log
             src-tauri/gen/android/app/build/reports/
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
