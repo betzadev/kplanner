@@ -20,120 +20,92 @@ permissions:
 jobs:
   build-android:
     runs-on: ubuntu-22.04
-
     env:
       NDK_VERSION: "27.2.12479018"
       RUST_TARGET: "aarch64-linux-android"
 
     steps:
       # ============================================================
-      # Step 1: Checkout
+      # 1. Checkout
       # ============================================================
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       # ============================================================
-      # Step 2: Pre-create build.log so the "Push Build Log" step
-      # never fails with git exit code 128 (pathspec didn't match).
+      # 2. Diagnostic snapshot BEFORE anything can fail.
+      # Writes to GITHUB_STEP_SUMMARY so it's visible in the Actions UI.
       # ============================================================
-      - name: Initialize build log
+      - name: Pre-build diagnostic snapshot
+        if: always()
         run: |
           {
-            echo "Build started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "Run: ${{ github.run_id }} / Attempt: ${{ github.run_attempt }}"
-            echo "Ref: ${{ github.ref_name }} / SHA: ${{ github.sha }}"
-            echo "Event: ${{ github.event_name }}"
-            echo "------------------------------------------------------------"
-          } > build.log
-          cat build.log
+            echo "## Pre-build diagnostic snapshot"
+            echo ""
+            echo "- **Run ID:** ${{ github.run_id }}"
+            echo "- **Ref:** ${{ github.ref_name }}"
+            echo "- **SHA:** ${{ github.sha }}"
+            echo "- **Event:** ${{ github.event_name }}"
+            echo "- **Runner:** $(uname -a)"
+            echo ""
+            echo "### Repo root contents"
+            echo '```'
+            ls -la
+            echo '```'
+            echo ""
+            echo "### Search for pnpm-lock.yaml"
+            echo '```'
+            find . -maxdepth 4 -name "pnpm-lock.yaml" 2>/dev/null || echo "(none found)"
+            echo '```'
+            echo ""
+            echo "### package.json (if present)"
+            echo '```json'
+            cat package.json 2>/dev/null || echo "(not found at repo root)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # ============================================================
-      # Step 3: Locate pnpm-lock.yaml (used by pnpm setup + cache)
-      # We search common locations so subsequent steps can use it.
-      # ============================================================
-      - name: Locate pnpm-lock.yaml
-        id: locate_lockfile
-        continue-on-error: true
-        run: |
-          # Common locations for the lockfile
-          for candidate in \
-            "pnpm-lock.yaml" \
-            "kplanner/pnpm-lock.yaml" \
-            "app/pnpm-lock.yaml" \
-            "frontend/pnpm-lock.yaml"; do
-            if [ -f "$candidate" ]; then
-              LOCK_DIR=$(dirname "$candidate")
-              echo "Found lockfile at: $candidate"
-              echo "lockfile_path=$candidate" >> "$GITHUB_OUTPUT"
-              echo "lockfile_dir=$LOCK_DIR" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          done
-          echo "::warning::pnpm-lock.yaml not found. pnpm cache will be disabled."
-          echo "lockfile_path=" >> "$GITHUB_OUTPUT"
-          echo "lockfile_dir=" >> "$GITHUB_OUTPUT"
-
-      # ============================================================
-      # Step 4: Install Linux system dependencies.
-      # continue-on-error: true so a transient apt issue never aborts.
-      # ============================================================
-      - name: Install system dependencies
-        continue-on-error: true
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends \
-            libncurses5 libncursesw5 libstdc++6 libz3-0 \
-            cmake ninja-build pkg-config libssl-dev
-          if [ ! -f /usr/lib/x86_64-linux-gnu/libtinfo.so.5 ]; then
-            sudo ln -sf /usr/lib/x86_64-linux-gnu/libtinfo.so.6 /usr/lib/x86_64-linux-gnu/libtinfo.so.5 || true
-          fi
-
-      # ============================================================
-      # Step 5: Setup Java JDK 17
+      # 3. Setup Java JDK 17 (Zulu distribution)
       # ============================================================
       - name: Setup Java JDK
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
       # ============================================================
-      # Step 6: Setup Android NDK 27 and required SDK components
+      # 4. Setup Android NDK 27 + required SDK components.
+      # No `set -e` here — every command is individually guarded.
       # ============================================================
-      - name: Setup Android NDK and SDK Environment
+      - name: Setup Android NDK and SDK
         run: |
-          set -eo pipefail
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
 
+          # Accept licenses (best-effort)
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
+          # Install required SDK components (best-effort)
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" \
-            "platforms;android-34" \
-            "platforms;android-35" \
-            "build-tools;34.0.0" \
-            "cmake;3.22.1" > /dev/null 2>&1 || true
+            "platform-tools" "platforms;android-34" "platforms;android-35" \
+            "build-tools;34.0.0" "cmake;3.22.1" > /dev/null 2>&1 || true
 
+          # Install pinned NDK with triple fallback
           NDK_PATH="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}"
           if [ ! -d "$NDK_PATH" ]; then
-            echo "NDK ${NDK_VERSION} not pre-installed. Installing via sdkmanager..."
+            echo "Installing NDK ${NDK_VERSION}..."
             "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" || \
             "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" || \
-            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.3.11579264"
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.3.11579264" || true
             NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk/27."* 2>/dev/null | sort -V | tail -n 1)
-            if [ -z "$NDK_PATH" ]; then
-              NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk"/* 2>/dev/null | sort -V | tail -n 1)
-            fi
+            [ -z "$NDK_PATH" ] && NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk"/* 2>/dev/null | sort -V | tail -n 1)
           fi
 
           if [ -z "${NDK_PATH:-}" ] || [ ! -d "$NDK_PATH" ]; then
-            echo "::error::NDK installation failed. No NDK directory found."
+            echo "::error::NDK installation failed"
             exit 1
           fi
 
@@ -141,57 +113,27 @@ jobs:
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$NDK_PATH" >> "$GITHUB_ENV"
           echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
-          echo "Configured NDK at: $NDK_PATH"
-          ls -la "$NDK_PATH" | head -20
+          echo "Configured NDK: $NDK_PATH"
 
       # ============================================================
-      # Step 7: Setup pnpm
+      # 5. Setup pnpm (using v4 — battle-tested, no v5 surprises)
       # ============================================================
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v4
         with:
           version: 10
 
       # ============================================================
-      # Step 8: Setup Node.js 22 (WITHOUT pnpm cache — the cache
-      # feature fails with exit code 2 when pnpm-lock.yaml is not
-      # present at the repo root, which is the most likely cause
-      # of the exit code 2 we were seeing).
+      # 6. Setup Node.js 22 (NO pnpm cache — avoids exit code 2
+      # when pnpm-lock.yaml is missing or out of sync).
       # ============================================================
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
       # ============================================================
-      # Step 9: Install JavaScript dependencies.
-      # IMPORTANT: --frozen-lockfile exits 100 when lockfile is out
-      # of sync with package.json. We skip --frozen-lockfile entirely
-      # to avoid that scenario, and rely on `pnpm install --no-frozen-lockfile`
-      # semantics. We also disable `set -e` for this step so a pnpm
-      # failure doesn't abort before we can capture diagnostics.
-      # ============================================================
-      - name: Install dependencies
-        run: |
-          set +e
-          echo "=== pnpm install (no frozen lockfile) ===" | tee -a build.log
-          pnpm install --no-frozen-lockfile 2>&1 | tee -a build.log
-          PNPM_EXIT=${PIPESTATUS[0]}
-          echo "pnpm install exited with code: $PNPM_EXIT" | tee -a build.log
-          if [ "$PNPM_EXIT" -ne 0 ]; then
-            echo "::error::pnpm install failed with exit code $PNPM_EXIT. See build.log in ci-logs branch."
-            echo "--- pnpm version ---" | tee -a build.log
-            pnpm --version 2>&1 | tee -a build.log
-            echo "--- node version ---" | tee -a build.log
-            node --version 2>&1 | tee -a build.log
-            echo "--- package.json ---" | tee -a build.log
-            cat package.json 2>&1 | tee -a build.log
-            exit "$PNPM_EXIT"
-          fi
-          exit 0
-
-      # ============================================================
-      # Step 10: Install Rust toolchain with aarch64-linux-android target
+      # 7. Install Rust toolchain with Android target
       # ============================================================
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -199,196 +141,176 @@ jobs:
           targets: ${{ env.RUST_TARGET }}
 
       # ============================================================
-      # Step 11: Build Web Frontend
+      # 8. Install JavaScript dependencies.
+      # Uses --no-frozen-lockfile to avoid exit 100 from lockfile
+      # drift. Explicit exit code capture and propagation.
       # ============================================================
-      - name: Build Web Frontend
+      - name: Install dependencies
         run: |
-          set +e
-          echo "=== pnpm build ===" | tee -a build.log
-          pnpm build 2>&1 | tee -a build.log
-          BUILD_EXIT=${PIPESTATUS[0]}
-          if [ "$BUILD_EXIT" -ne 0 ]; then
-            echo "::error::pnpm build failed with exit code $BUILD_EXIT"
-            exit "$BUILD_EXIT"
-          fi
-          exit 0
+          echo "=== pnpm version ==="
+          pnpm --version
+          echo "=== node version ==="
+          node --version
+          echo "=== pnpm install --no-frozen-lockfile ==="
+          pnpm install --no-frozen-lockfile
+          INSTALL_EXIT=$?
+          echo "pnpm install exit code: $INSTALL_EXIT"
+          exit $INSTALL_EXIT
 
       # ============================================================
-      # Step 12: Ensure Android Debug Keystore exists
+      # 9. Build web frontend
       # ============================================================
-      - name: Ensure Android Debug Keystore Exists
+      - name: Build web frontend
+        run: pnpm build
+
+      # ============================================================
+      # 10. Ensure Android debug keystore exists (used by both
+      # debug and release-with-debug-signing builds).
+      # ============================================================
+      - name: Ensure Android Debug Keystore
         run: |
           mkdir -p ~/.android
           if [ ! -f ~/.android/debug.keystore ]; then
-            echo "Generating standard Android debug keystore..."
             keytool -genkey -v \
               -keystore ~/.android/debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
               -dname "CN=Android Debug,O=Android,C=US"
-          else
-            echo "Debug keystore already present at ~/.android/debug.keystore"
           fi
-          keytool -list -v -keystore ~/.android/debug.keystore -storepass android | head -20
+          keytool -list -keystore ~/.android/debug.keystore -storepass android | head -5
 
       # ============================================================
-      # Step 13: Initialize Android project, configure NDK, inject
-      # signing config, and build the APK.
+      # 11. Initialize Android project, inject signing config,
+      # and build the APK. No `set -e` so a non-critical sub-step
+      # doesn't abort the build silently.
       # ============================================================
-      - name: Initialize Android Project and Build APK
+      - name: Initialize Android project and build APK
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-          ANDROID_HOME: ${{ env.ANDROID_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-          NDK_HOME: ${{ env.NDK_HOME }}
-          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_ROOT }}
           BUILD_TYPE: ${{ github.event.inputs.build_type || 'debug' }}
         run: |
-          set -eo pipefail
-          (
-            echo "=== ENVIRONMENT CHECK ==="
-            echo "ANDROID_HOME=$ANDROID_HOME"
-            echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-            echo "NDK_HOME=$NDK_HOME"
-            echo "NDK version: $(cat "$NDK_HOME/source.properties" 2>/dev/null | grep Pkg.Revision || echo 'unknown')"
-            echo "BUILD_TYPE=$BUILD_TYPE"
-            echo ""
-            echo "=== TAURI INFO ==="
-            pnpm tauri info || true
+          echo "=== TAURI INFO ==="
+          pnpm tauri info || true
 
-            echo "=== TAURI ANDROID INIT ==="
-            if [ ! -d "src-tauri/gen/android/app" ]; then
-              pnpm tauri android init --ci
-            else
-              echo "Android project already initialized, skipping init."
-            fi
+          echo "=== TAURI ANDROID INIT ==="
+          if [ ! -d "src-tauri/gen/android/app" ]; then
+            pnpm tauri android init --ci
+          else
+            echo "Android project already initialized."
+          fi
 
-            echo "=== WRITE LOCAL.PROPERTIES ==="
-            cat > src-tauri/gen/android/local.properties <<EOF
+          echo "=== WRITE local.properties ==="
+          cat > src-tauri/gen/android/local.properties <<EOF
           sdk.dir=$ANDROID_HOME
           ndk.dir=$NDK_HOME
           EOF
-            cat src-tauri/gen/android/local.properties
+          cat src-tauri/gen/android/local.properties
 
-            echo "=== GRADLEW CHMOD ==="
-            if [ -f "src-tauri/gen/android/gradlew" ]; then
-              chmod +x src-tauri/gen/android/gradlew
-            fi
+          echo "=== CHMOD gradlew ==="
+          [ -f "src-tauri/gen/android/gradlew" ] && chmod +x src-tauri/gen/android/gradlew || true
 
-            echo "=== SIGNING CONFIG INJECTION ==="
-            GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
-            if [ -f "$GRADLE_APP" ]; then
-              python3 << 'PYEOF'
+          echo "=== INJECT debug signing into release buildType ==="
+          GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
+          if [ -f "$GRADLE_APP" ]; then
+            python3 << 'PYEOF'
           import pathlib
           p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts")
           c = p.read_text()
           if "signingConfig = signingConfigs.getByName(\"debug\")" not in c:
               marker = "getByName(\"release\") {"
               if marker in c:
-                  c = c.replace(
-                      marker,
-                      marker + "\n            signingConfig = signingConfigs.getByName(\"debug\")",
-                      1
-                  )
+                  c = c.replace(marker, marker + "\n            signingConfig = signingConfigs.getByName(\"debug\")", 1)
                   p.write_text(c)
-                  print("Injected debug signing config into release build type.")
+                  print("Injected.")
               else:
-                  print("WARNING: 'getByName(\"release\") {' block not found in build.gradle.kts")
+                  print("WARNING: release buildType block not found.")
           else:
-              print("Signing config already present, no changes needed.")
+              print("Already injected.")
           PYEOF
-            else
-              echo "WARNING: $GRADLE_APP not found. Init may have failed."
-            fi
+          else
+            echo "WARNING: $GRADLE_APP not found."
+          fi
 
-            echo "=== TAURI ANDROID BUILD ($BUILD_TYPE - $RUST_TARGET) ==="
-            if [ "$BUILD_TYPE" = "release" ]; then
-              pnpm tauri android build --apk --target "$RUST_TARGET" --verbose
-            else
-              pnpm tauri android build --debug --apk --target "$RUST_TARGET" --verbose
-            fi
+          echo "=== TAURI ANDROID BUILD ($BUILD_TYPE) ==="
+          if [ "$BUILD_TYPE" = "release" ]; then
+            pnpm tauri android build --apk --target "$RUST_TARGET" --verbose
+          else
+            pnpm tauri android build --debug --apk --target "$RUST_TARGET" --verbose
+          fi
 
-            echo "=== APK OUTPUT LISTING ==="
-            find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \;
-          ) 2>&1 | tee -a build.log
+          echo "=== APK OUTPUTS ==="
+          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; || true
 
       # ============================================================
-      # Step 14: On failure, dump diagnostic info to build.log.
-      # Wrapped in a subshell with || true so this step itself
-      # never fails the job.
+      # 12. On failure: diagnostic dump to step summary.
+      # Wrapped in subshell + || true so this step itself can
+      # never fail the job.
       # ============================================================
-      - name: Diagnostics on failure
+      - name: Failure diagnostics
         if: failure()
         continue-on-error: true
         run: |
           {
-            echo "=== FAILED BUILD DIAGNOSTICS ==="
-            echo "--- pwd ---"
-            pwd
-            echo "--- ls root ---"
-            ls -la
-            echo "--- pnpm-lock.yaml search ---"
-            find . -maxdepth 3 -name "pnpm-lock.yaml" 2>/dev/null || true
-            echo "--- package.json ---"
-            cat package.json 2>/dev/null || echo "(not found)"
-            echo "--- Rust target check ---"
-            rustup target list --installed || true
-            echo "--- NDK directory ---"
-            ls -la "$NDK_HOME" 2>/dev/null || true
-            echo "--- Android project tree ---"
-            ls -la src-tauri/gen/android/ 2>/dev/null || true
-            ls -la src-tauri/gen/android/app/ 2>/dev/null || true
-            echo "--- local.properties ---"
-            cat src-tauri/gen/android/local.properties 2>/dev/null || true
-            echo "--- build.gradle.kts signingConfigs block ---"
-            grep -A 30 "signingConfigs" src-tauri/gen/android/app/build.gradle.kts 2>/dev/null || true
-            echo "--- Last 150 lines of build.log ---"
-            tail -n 150 build.log 2>/dev/null || echo "(build.log not found)"
-          } | tee -a build.log || true
+            echo "## ❌ Build failed — diagnostic dump"
+            echo ""
+            echo "### Environment"
+            echo '```'
+            env | grep -E "^(ANDROID|NDK|RUST|BUILD_TYPE|TURSO)" | sort
+            echo '```'
+            echo ""
+            echo "### Rust targets installed"
+            echo '```'
+            rustup target list --installed 2>/dev/null || echo "(rustup not available)"
+            echo '```'
+            echo ""
+            echo "### NDK directory"
+            echo '```'
+            ls -la "$NDK_HOME" 2>/dev/null || echo "(NDK_HOME not set or directory missing)"
+            echo '```'
+            echo ""
+            echo "### src-tauri/gen/android tree"
+            echo '```'
+            find src-tauri/gen/android -maxdepth 3 -type f 2>/dev/null | head -50 || echo "(android project not generated)"
+            echo '```'
+            echo ""
+            echo "### local.properties"
+            echo '```'
+            cat src-tauri/gen/android/local.properties 2>/dev/null || echo "(not found)"
+            echo '```'
+            echo ""
+            echo "### build.gradle.kts (signingConfigs block)"
+            echo '```'
+            grep -B 2 -A 30 "signingConfigs" src-tauri/gen/android/app/build.gradle.kts 2>/dev/null || echo "(file not found)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true
 
       # ============================================================
-      # Step 15: Push build.log to ci-logs branch (best-effort).
-      # continue-on-error: true so a git issue never fails the job.
+      # 13. Upload APK artifact (always runs so we get partial
+      # outputs even on failure).
       # ============================================================
-      - name: Push Build Log to ci-logs Branch
+      - name: Upload APK artifact
         if: always()
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ ! -f build.log ]; then
-            echo "build.log was not created by any prior step — creating empty placeholder." > build.log
-          fi
-          echo "------------------------------------------------------------" >> build.log
-          echo "Build finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> build.log
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          REPO="${{ github.repository }}"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
-
-          git stash --include-untracked -q || true
-          git checkout -B ci-logs
-
-          git add -f build.log
-          git commit -m "ci: capture build log (run ${{ github.run_id }})" || true
-          git push -f origin ci-logs || echo "::warning::Could not push ci-logs branch."
-
-      # ============================================================
-      # Step 16: Upload APK Artifact
-      # ============================================================
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v4
         with:
           name: kplanner-apk
           path: |
-            src-tauri/gen/android/app/build/outputs/apk/**/app-*.apk
-          if-no-files-found: error
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk.sha256
+          if-no-files-found: warn
           retention-days: 30
+
+      # ============================================================
+      # 14. Upload full build log artifact (so user can download
+      # it without needing to dig into Actions logs).
+      # ============================================================
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            src-tauri/gen/android/app/build/reports/
+          if-no-files-found: warn
+          retention-days: 7
