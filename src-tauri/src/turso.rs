@@ -1,8 +1,5 @@
 use libsql::{Builder, Database, Connection};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use crate::models::{DailySheet, SubjectItem};
 
 pub struct TursoManager {
     db: Database,
@@ -61,8 +58,8 @@ impl TursoManager {
 
     /// Sincronización nativa con Turso: envía mutaciones locales y descarga las nuevas
     pub async fn sync(&self) -> Result<usize, Box<dyn std::error::Error>> {
-        let frames_synced = self.db.sync().await?;
-        Ok(frames_synced)
+        let replicated = self.db.sync().await?;
+        Ok(replicated.frames_synced())
     }
 
     pub fn connection(&self) -> &Connection {
