@@ -2,8 +2,17 @@ name: Build Android APK (Tauri v2 + Turso)
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'APK Build Type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
 
 permissions:
   contents: write
@@ -68,11 +77,20 @@ jobs:
       - name: Build Web Frontend
         run: pnpm build
 
+      - name: Ensure Android Debug Keystore Exists
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            echo "Generating debug keystore..."
+            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
       - name: Initialize Android Project and Build APK
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           NDK_HOME: ${{ env.NDK_HOME }}
+          BUILD_TYPE: ${{ github.event.inputs.build_type || 'debug' }}
         run: |
           set -euo pipefail
           (
@@ -84,18 +102,33 @@ jobs:
               pnpm tauri android init --ci
             fi
 
-            echo "=== GRADLEW CHMOD & SHRINKING INJECTION ==="
+            echo "=== GRADLEW CHMOD & SIGNING CONFIG INJECTION ==="
             if [ -f "src-tauri/gen/android/gradlew" ]; then
               chmod +x src-tauri/gen/android/gradlew
             fi
 
             GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
             if [ -f "$GRADLE_APP" ]; then
-              python3 -c 'import pathlib; p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts"); c = p.read_text(); p.write_text(c.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = true\n            isShrinkResources = true")) if "isMinifyEnabled" not in c else None'
+              python3 -c '
+              import pathlib
+              p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts")
+              c = p.read_text()
+              if "signingConfig = signingConfigs.getByName(\"debug\")" not in c:
+                  c = c.replace(
+                      "getByName(\"release\") {",
+                      "getByName(\"release\") {\n            signingConfig = signingConfigs.getByName(\"debug\")"
+                  )
+                  p.write_text(c)
+                  print("Injected debug signing config into release build type.")
+              '
             fi
 
-            echo "=== TAURI ANDROID BUILD (aarch64) ==="
-            pnpm tauri android build --apk --target aarch64
+            echo "=== TAURI ANDROID BUILD ($BUILD_TYPE - aarch64) ==="
+            if [ "$BUILD_TYPE" = "release" ]; then
+              pnpm tauri android build --apk --target aarch64
+            else
+              pnpm tauri android build --debug --apk --target aarch64
+            fi
           ) 2>&1 | tee build.log
 
       - name: Push Build Log to ci-logs Branch
@@ -113,4 +146,5 @@ jobs:
         with:
           name: kplanner-apk
           path: |
-            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src-tauri/gen/android/app/build/outputs/apk/**/app-*.apk
+          if-no-files-found: error
