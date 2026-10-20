@@ -15,8 +15,11 @@ import {
   ChevronRight,
   Award,
   Target,
+  ShieldCheck,
+  Clock,
 } from 'lucide-react';
 import { StreakModal } from '../gamification/StreakModal';
+import { useBackButton } from '../../hooks/useBackButton';
 
 type AnalyticsPeriod = 'daily' | 'weekly' | 'annual';
 
@@ -25,6 +28,12 @@ export function AnalyticsView() {
   const [streakModalOpen, setStreakModalOpen] = useState(false);
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
   const [hoveredSlice, setHoveredSlice] = useState<number | null>(null);
+
+  useBackButton({
+    openModals: [
+      { name: "streak", isOpen: streakModalOpen, close: () => setStreakModalOpen(false) },
+    ],
+  });
 
   const currentDate = usePlannerStore((state) => state.currentDate);
   const setCurrentDate = usePlannerStore((state) => state.setCurrentDate);
@@ -161,6 +170,113 @@ export function AnalyticsView() {
   const annualTotalMinutes = useMemo(() => annualMonths.reduce((acc, m) => acc + m.minutes, 0), [annualMonths]);
   const annualDaysStudied = useMemo(() => annualMonths.reduce((acc, m) => acc + m.daysStudied, 0), [annualMonths]);
   const maxMonthMinutes = Math.max(60, ...annualMonths.map((m) => m.minutes));
+
+  // Phase 4.1: Verified Focus Ratio (%) Computation
+  const verifiedStats = useMemo(() => {
+    let totalStudiedBlocks = 0;
+    let verifiedBlocks = 0;
+
+    const countBlocksInSheet = (sheet?: any) => {
+      if (!sheet || !sheet.timeGrid) return;
+      Object.values(sheet.timeGrid).forEach((cell: any) => {
+        if (cell.subjectId) {
+          totalStudiedBlocks++;
+          if (cell.isVerifiedTimer) {
+            verifiedBlocks++;
+          }
+        }
+      });
+    };
+
+    if (period === "daily") {
+      countBlocksInSheet(currentSheet);
+    } else if (period === "weekly") {
+      weeklyData.forEach((d) => countBlocksInSheet(dailySheets[d.date]));
+    } else {
+      Object.values(dailySheets).forEach((sheet) => countBlocksInSheet(sheet));
+    }
+
+    const ratio = totalStudiedBlocks > 0 ? Math.round((verifiedBlocks / totalStudiedBlocks) * 100) : 0;
+    return {
+      ratio,
+      verifiedBlocks,
+      totalStudiedBlocks,
+      verifiedMinutes: verifiedBlocks * 10,
+    };
+  }, [period, currentSheet, weeklyData, dailySheets]);
+
+  // Phase 4.1: Automated Productivity Insights from past 7 days
+  const weeklyInsights = useMemo(() => {
+    const hourlyDistribution = Array(24).fill(0);
+    const subjectActualMinutes = new Map<EntityId, number>();
+    const subjectPlannedMinutes = new Map<EntityId, number>();
+    const subjectMatchedMinutes = new Map<EntityId, number>();
+
+    weeklyData.forEach((d) => {
+      const sheet = dailySheets[d.date];
+      if (!sheet || !sheet.timeGrid) return;
+
+      Object.values(sheet.timeGrid).forEach((cell) => {
+        if (cell.subjectId) {
+          const mins = Math.round(10 * (cell.fillRatio ?? 1.0));
+          hourlyDistribution[cell.hour] += mins;
+          subjectActualMinutes.set(cell.subjectId, (subjectActualMinutes.get(cell.subjectId) || 0) + mins);
+        }
+        if (cell.plannedSubjectId) {
+          subjectPlannedMinutes.set(cell.plannedSubjectId, (subjectPlannedMinutes.get(cell.plannedSubjectId) || 0) + 10);
+          if (cell.subjectId === cell.plannedSubjectId) {
+            subjectMatchedMinutes.set(cell.plannedSubjectId, (subjectMatchedMinutes.get(cell.plannedSubjectId) || 0) + 10);
+          }
+        }
+      });
+    });
+
+    let max2hMins = 0;
+    let peakStartHour = 9;
+    for (let h = 0; h < 24; h++) {
+      const h2 = (h + 1) % 24;
+      const windowSum = hourlyDistribution[h] + hourlyDistribution[h2];
+      if (windowSum > max2hMins) {
+        max2hMins = windowSum;
+        peakStartHour = h;
+      }
+    }
+    const peakEndHour = (peakStartHour + 2) % 24;
+    const peakWindowStr = `${String(peakStartHour).padStart(2, "0")}:00 - ${String(peakEndHour).padStart(2, "0")}:00`;
+
+    let mostConsistentSubjectName = "None";
+    let maxSubMins = 0;
+    subjectActualMinutes.forEach((mins, subId) => {
+      if (mins > maxSubMins) {
+        maxSubMins = mins;
+        const sub = subjects.find((s) => s.id === subId);
+        if (sub) mostConsistentSubjectName = sub.name;
+      }
+    });
+
+    let mostNeglectedSubjectName: string | null = null;
+    let lowestRate = 101;
+    subjectPlannedMinutes.forEach((plannedMins, subId) => {
+      if (plannedMins > 0) {
+        const matchedMins = subjectMatchedMinutes.get(subId) || 0;
+        const rate = Math.round((matchedMins / plannedMins) * 100);
+        if (rate < lowestRate) {
+          lowestRate = rate;
+          const sub = subjects.find((s) => s.id === subId);
+          if (sub) mostNeglectedSubjectName = sub.name;
+        }
+      }
+    });
+
+    return {
+      peakWindowStr,
+      max2hMins,
+      mostConsistentSubjectName,
+      maxSubMins,
+      mostNeglectedSubjectName,
+      lowestRate: lowestRate <= 100 ? lowestRate : null,
+    };
+  }, [weeklyData, dailySheets, subjects]);
 
   // Compute donut chart angles for Daily
   const donutSlices = useMemo(() => {
@@ -311,7 +427,7 @@ export function AnalyticsView() {
       </div>
 
       {/* KPI Stats Cards (Includes Plan Fulfillment Rate) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         <div className="bg-white/85 dark:bg-slate-900 border border-[#C2D8FC]/60 dark:border-slate-800 rounded-3xl p-3 sm:p-3.5 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
             <span className="text-[10px] font-bold">
@@ -332,6 +448,22 @@ export function AnalyticsView() {
               : period === 'weekly'
               ? `Avg ${weeklyAvg}m/day`
               : `${annualDaysStudied} active days`}
+          </span>
+        </div>
+
+        {/* Phase 4.1: Verified Focus Ratio (%) Card */}
+        <div className="bg-white/85 dark:bg-slate-900 border border-[#C2D8FC]/60 dark:border-slate-800 rounded-3xl p-3 sm:p-3.5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
+            <span className="text-[10px] font-bold">Verified Focus</span>
+            <ShieldCheck size={14} className="text-emerald-500" />
+          </div>
+          <div className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 font-mono">
+            {verifiedStats.totalStudiedBlocks > 0 ? `${verifiedStats.ratio}%` : "N/A"}
+          </div>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate block">
+            {verifiedStats.totalStudiedBlocks > 0
+              ? `${verifiedStats.verifiedBlocks} of ${verifiedStats.totalStudiedBlocks} blocks`
+              : "No study logged"}
           </span>
         </div>
 
@@ -388,6 +520,80 @@ export function AnalyticsView() {
           <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate block">
             {xp} XP • {levelInfo.title}
           </span>
+        </div>
+      </div>
+
+      {/* Phase 4.1: Automated Productivity Insights Banner */}
+      <div className="bg-gradient-to-r from-[#E4EDFC]/90 via-indigo-50/70 to-purple-50/70 dark:from-slate-900 dark:via-slate-900/90 dark:to-indigo-950/40 border border-[#C2D8FC] dark:border-slate-800 rounded-3xl p-3.5 sm:p-4 shadow-xs space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-white dark:bg-slate-800 rounded-xl text-indigo-600 dark:text-indigo-400 shadow-2xs">
+              <Sparkles size={16} />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                Automated Productivity Insights
+                <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300">
+                  Weekly AI Coach
+                </span>
+              </h3>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                Local heuristic analysis of your study patterns over the past 7 days
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+          {/* Peak Productivity Window */}
+          <div className="bg-white/80 dark:bg-slate-800/80 border border-[#C2D8FC]/60 dark:border-slate-700 rounded-2xl p-2.5 flex items-start gap-2">
+            <Clock size={16} className="text-blue-500 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Peak Focus Window
+              </div>
+              <div className="text-xs font-extrabold text-slate-800 dark:text-slate-100 font-mono">
+                {weeklyInsights.peakWindowStr}
+              </div>
+              <div className="text-[9px] text-slate-400 truncate">
+                {weeklyInsights.max2hMins > 0 ? `${weeklyInsights.max2hMins}m logged in this 2h block` : "Log study time to discover"}
+              </div>
+            </div>
+          </div>
+
+          {/* Consistency & Balance */}
+          <div className="bg-white/80 dark:bg-slate-800/80 border border-[#C2D8FC]/60 dark:border-slate-700 rounded-2xl p-2.5 flex items-start gap-2">
+            <TrendingUp size={16} className="text-emerald-500 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Most Consistent Subject
+              </div>
+              <div className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
+                {weeklyInsights.mostConsistentSubjectName}
+              </div>
+              <div className="text-[9px] text-slate-400 truncate">
+                {weeklyInsights.maxSubMins > 0 ? `${weeklyInsights.maxSubMins}m total this week` : "No study logged"}
+              </div>
+            </div>
+          </div>
+
+          {/* Plan Attention Needed */}
+          <div className="bg-white/80 dark:bg-slate-800/80 border border-[#C2D8FC]/60 dark:border-slate-700 rounded-2xl p-2.5 flex items-start gap-2">
+            <Target size={16} className="text-amber-500 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Plan Attention Area
+              </div>
+              <div className="text-xs font-extrabold text-slate-800 dark:text-slate-100 truncate">
+                {weeklyInsights.mostNeglectedSubjectName ? weeklyInsights.mostNeglectedSubjectName : "All on track!"}
+              </div>
+              <div className="text-[9px] text-slate-400 truncate">
+                {weeklyInsights.lowestRate !== null
+                  ? `${weeklyInsights.lowestRate}% plan fulfillment rate`
+                  : "All scheduled targets met"}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

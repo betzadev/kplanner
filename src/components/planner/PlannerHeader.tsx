@@ -14,6 +14,7 @@ import {
 import { DateString } from '../../types';
 import { formatStudyDuration, parseDateString, toDateString } from '../../utils/timeSlotMapper';
 import { triggerHaptic } from '../../utils/haptics';
+import { useBackButton } from '../../hooks/useBackButton';
 import { useSyncStore } from '../../services/tursoSync';
 import { useDDayStore, calculateDDay } from '../../store/useDDayStore';
 import { DDayModal } from './DDayModal';
@@ -38,6 +39,14 @@ export function PlannerHeader({
 }: PlannerHeaderProps) {
   const [ddayModalOpen, setDdayModalOpen] = useState(false);
   const [stampModalOpen, setStampModalOpen] = useState(false);
+  useBackButton({
+    activeTab: 'planner',
+    setActiveTab: () => {},
+    openModals: [
+      { name: 'dday', isOpen: ddayModalOpen, close: () => setDdayModalOpen(false) },
+      { name: 'stamp', isOpen: stampModalOpen, close: () => setStampModalOpen(false) },
+    ],
+  });
   const { status: syncStatus, syncNow } = useSyncStore();
   const { events: ddayEvents } = useDDayStore();
   const completionStamp = usePlannerStore((state) => state.dailySheets[date]?.completionStamp ?? null);

@@ -15,6 +15,7 @@ class AmbientAudioEngine {
   private filterNode: BiquadFilterNode | null = null;
   private currentSound: AmbientSoundType = 'none';
   private currentVolume: number = 0.5;
+  private bufferCache = new Map<AmbientSoundType, AudioBuffer>();
 
   private initContext(): AudioContext {
     if (!this.ctx) {
@@ -31,6 +32,9 @@ class AmbientAudioEngine {
 
   // Generates 5 seconds of looped audio buffer
   private generateNoiseBuffer(type: 'brown' | 'pink' | 'rain'): AudioBuffer {
+    if (this.bufferCache.has(type)) {
+      return this.bufferCache.get(type)!;
+    }
     const ctx = this.initContext();
     const bufferSize = ctx.sampleRate * 5;
     const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
@@ -70,6 +74,7 @@ class AmbientAudioEngine {
       }
     }
 
+    this.bufferCache.set(type, buffer);
     return buffer;
   }
 

@@ -26,14 +26,14 @@ jobs:
         run: |
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          
+
           # Add SDK commandline tools and platform tools to PATH
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-          
+
           # Accept licenses
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-          
+
           # Find existing NDK or install one if not present
           if [ -d "$ANDROID_SDK_ROOT/ndk" ] && [ -n "$(ls -A "$ANDROID_SDK_ROOT/ndk" 2>/dev/null)" ]; then
             NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk"/* | sort -V | tail -n 1)
@@ -41,7 +41,7 @@ jobs:
             "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.1.10909125"
             NDK_PATH="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
           fi
-          
+
           echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
@@ -78,29 +78,22 @@ jobs:
           (
             echo "=== TAURI INFO ==="
             pnpm tauri info || true
-            
+
             echo "=== TAURI ANDROID INIT ==="
             if [ ! -d "src-tauri/gen/android" ]; then
               pnpm tauri android init --ci
             fi
-            
+
             echo "=== GRADLEW CHMOD & SHRINKING INJECTION ==="
             if [ -f "src-tauri/gen/android/gradlew" ]; then
               chmod +x src-tauri/gen/android/gradlew
             fi
-            
+
             GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
             if [ -f "$GRADLE_APP" ]; then
-              python3 -c '
-with open("src-tauri/gen/android/app/build.gradle.kts", "r") as f:
-    c = f.read()
-if "isMinifyEnabled" not in c:
-    c = c.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = true\n            isShrinkResources = true")
-    with open("src-tauri/gen/android/app/build.gradle.kts", "w") as f:
-        f.write(c)
-'
+              python3 -c 'import pathlib; p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts"); c = p.read_text(); p.write_text(c.replace("getByName(\"release\") {", "getByName(\"release\") {\n            isMinifyEnabled = true\n            isShrinkResources = true")) if "isMinifyEnabled" not in c else None'
             fi
-            
+
             echo "=== TAURI ANDROID BUILD (aarch64) ==="
             pnpm tauri android build --apk --target aarch64
           ) 2>&1 | tee build.log

@@ -54,12 +54,21 @@ export function useStudyTimer() {
   // Pomodoro countdown calculations
   const targetDurationMs = getCurrentTargetDurationMs();
   const isPomodoro = timerState.mode === 'pomodoro';
-  const remainingMs = isPomodoro ? Math.max(0, targetDurationMs - currentMs) : currentMs;
+  const isOvertime = Boolean(
+    timerConfig.flowtimeOvertimeEnabled &&
+    isPomodoro &&
+    timerState.pomodoroPhase === 'focus' &&
+    currentMs > targetDurationMs
+  );
+  const remainingMs = isPomodoro
+    ? Math.max(0, targetDurationMs - currentMs)
+    : currentMs;
+  const displayMs = isOvertime ? currentMs - targetDurationMs : remainingMs;
   const progressPercent = isPomodoro
     ? Math.min(100, Math.max(0, (currentMs / targetDurationMs) * 100))
     : 100;
 
-  const formatted = formatTimerMs(remainingMs);
+  const formatted = formatTimerMs(displayMs);
 
   return {
     status: timerState.status,
@@ -74,6 +83,7 @@ export function useStudyTimer() {
     targetDurationMs,
     progressPercent,
     formatted,
+    isOvertime,
     startTimer,
     pauseTimer,
     resumeTimer,

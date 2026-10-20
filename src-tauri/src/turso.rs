@@ -76,6 +76,16 @@ impl TursoManager {
         )
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS gamification_profile (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                payload_json TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );",
+            (),
+        )
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         Ok(Self { db, conn })
     }
@@ -190,5 +200,44 @@ impl TursoManager {
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         }
         Ok(())
+    }
+    pub async fn upsert_gamification_profile(
+        &self,
+        payload_json: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as i64;
+
+        self.conn
+            .execute(
+                "INSERT INTO gamification_profile (id, payload_json, updated_at)
+                 VALUES (1, ?1, ?2)
+                 ON CONFLICT(id) DO UPDATE SET
+                     payload_json = excluded.payload_json,
+                     updated_at = excluded.updated_at;",
+                libsql::params![payload_json, now],
+            )
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        Ok(())
+    }
+
+    pub async fn get_gamification_profile(
+        &self,
+    ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut rows = self
+            .conn
+            .query("SELECT payload_json FROM gamification_profile WHERE id = 1;", ())
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        if let Ok(Some(row)) = rows.next().await {
+            let payload: String = row.get(0)?;
+            Ok(Some(payload))
+        } else {
+            Ok(None)
+        }
     }
 }

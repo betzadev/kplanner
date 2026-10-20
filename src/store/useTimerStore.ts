@@ -49,6 +49,7 @@ const DEFAULT_TIMER_CONFIG: TimerConfig = {
   chimePreset: 'default',
   ambientSound: 'none',
   ambientVolume: 0.5,
+  flowtimeOvertimeEnabled: false,
 };
 
 const INITIAL_TIMER_STATE: TimerState = {
@@ -160,7 +161,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
   },
 
   tick: () => {
-    const { timerState } = get();
+    const { timerState, timerConfig } = get();
     if (timerState.status !== 'running') return;
 
     const now = Date.now() as UnixTimestampMs;
@@ -173,7 +174,12 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       const targetDurationMs = get().getCurrentTargetDurationMs();
 
       if (totalElapsedMs >= targetDurationMs) {
-        get().transitionPomodoroPhase();
+        if (timerConfig.flowtimeOvertimeEnabled && timerState.pomodoroPhase === 'focus') {
+          // In flowtime overtime mode: continue counting upwards and painting blocks
+          // User clicks transition/break when ready to leave flow state
+        } else {
+          get().transitionPomodoroPhase();
+        }
       }
     }
   },

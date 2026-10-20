@@ -11,7 +11,8 @@ import {
   requestNotificationAccess,
 } from '../../utils/notifications';
 import { ambientAudio, AmbientSoundType } from '../../utils/ambientAudio';
-import { Volume2, VolumeX, Waves, CloudRain, Wind } from 'lucide-react';
+import { Volume2, VolumeX, Waves, CloudRain, Wind, Sun, Zap } from 'lucide-react';
+import { screenWakeLock } from '../../utils/wakeLock';
 
 export function TimerView() {
   const subjects = useSubjectStore((state) => state.subjects);
@@ -27,6 +28,7 @@ export function TimerView() {
     progressPercent,
     remainingMs,
     formatted,
+    isOvertime,
     startTimer,
     pauseTimer,
     resumeTimer,
@@ -45,6 +47,29 @@ export function TimerView() {
   const [ambientVolume, setAmbientVolume] = useState<number>(timerConfig.ambientVolume ?? 0.5);
 
   const activeSubject = subjects.find((s) => s.id === selectedSubjectId) ?? subjects[0];
+  const [wakeLockActive, setWakeLockActive] = useState(false);
+
+  const toggleWakeLock = async () => {
+    if (wakeLockActive) {
+      await screenWakeLock.release();
+      setWakeLockActive(false);
+      triggerHaptic('light');
+    } else {
+      const ok = await screenWakeLock.acquire();
+      if (ok) {
+        setWakeLockActive(true);
+        triggerHaptic('success');
+      } else {
+        triggerHaptic('warning');
+      }
+    }
+  };
+
+  const isFlowtime = Boolean(timerConfig.flowtimeOvertimeEnabled);
+  const toggleFlowtime = () => {
+    updateConfig({ flowtimeOvertimeEnabled: !isFlowtime });
+    triggerHaptic('light');
+  };
 
   // Schedule or cancel system-level background notifications
   useEffect(() => {
@@ -163,6 +188,38 @@ export function TimerView() {
           ))}
         </div>
 
+        {/* Desk Clock WakeLock & Flowtime Mode Toggles */}
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            type="button"
+            onClick={toggleWakeLock}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+              wakeLockActive
+                ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-300 border-amber-300 dark:border-amber-700 shadow-xs ring-1 ring-amber-400/40'
+                : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+            }`}
+            title="Keep Screen Awake (Desk Clock Mode)"
+          >
+            <Sun size={12} className={wakeLockActive ? 'text-amber-500 fill-amber-500' : ''} />
+            <span>{wakeLockActive ? 'Screen Awake: ON' : 'Desk Clock'}</span>
+          </button>
+
+          {mode === 'pomodoro' && (
+            <button
+              type="button"
+              onClick={toggleFlowtime}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                isFlowtime
+                  ? 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700 shadow-xs ring-1 ring-indigo-400/40'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+              }`}
+              title="Flowtime Overtime Mode: automatically counts upward past 00:00 without stopping focus"
+            >
+              <Zap size={12} className={isFlowtime ? 'text-indigo-500 fill-indigo-500' : ''} />
+              <span>{isFlowtime ? 'Flowtime: ON' : 'Flowtime Mode'}</span>
+            </button>
+          )}
+        </div>
         {/* Big Display Clock with Previous & Next cycle handlers */}
         <div className="my-2 w-full">
           <TimerDisplay
@@ -176,6 +233,7 @@ export function TimerView() {
             progressPercent={progressPercent}
             subjectName={activeSubject?.name}
             subjectColor={activeSubject?.color}
+            isOvertime={isOvertime}
             onSkipPhase={() => {
               cancelScheduledNotification();
               skipPomodoroPhase();

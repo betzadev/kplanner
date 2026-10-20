@@ -5,7 +5,8 @@ import { useTimeGrid } from '../../hooks/useTimeGrid';
 import { useSubjectStore } from '../../store/useSubjectStore';
 import { isCurrentBlock, toDateString } from '../../utils/timeSlotMapper';
 import { triggerHaptic } from '../../utils/haptics';
-import { Paintbrush, Hand, HelpCircle, CalendarRange, CheckCircle2 } from 'lucide-react';
+import { Paintbrush, Hand, HelpCircle, CalendarRange, CheckCircle2, Sparkles } from 'lucide-react';
+import { RoutineModal } from './RoutineModal';
 
 interface TenMinGridProps {
   date: DateString;
@@ -17,6 +18,7 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
   const [touchMode, setTouchMode] = useState<'paint' | 'scroll'>('paint');
   const [gridMode, setGridMode] = useState<'actual' | 'plan'>('actual');
   const [showExplanation, setShowExplanation] = useState(false);
+  const [showRoutineModal, setShowRoutineModal] = useState(false);
 
   const { paintRange, useCellState } = useTimeGrid(date);
   const subjects = useSubjectStore((state) => state.subjects);
@@ -220,6 +222,22 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
             </button>
           </div>
 
+          {/* Routine Templates action button in Plan Mode */}
+          {gridMode === 'plan' && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowRoutineModal(true);
+                triggerHaptic('light');
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded-xl text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-colors shadow-xs cursor-pointer"
+              title="Routine Blueprints: Save or apply scheduled templates"
+            >
+              <Sparkles size={11} />
+              <span className="hidden sm:inline">Templates</span>
+            </button>
+          )}
+
           {/* Touch Mode Toggle: Paint vs Scroll */}
           <div className="flex items-center bg-[#E4EDFC]/80 dark:bg-slate-800 p-0.5 rounded-xl border border-[#C2D8FC] dark:border-slate-700">
             <button
@@ -335,6 +353,12 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
           ))}
         </div>
       </div>
+
+      <RoutineModal
+        isOpen={showRoutineModal}
+        onClose={() => setShowRoutineModal(false)}
+        date={date}
+      />
     </div>
   );
 }

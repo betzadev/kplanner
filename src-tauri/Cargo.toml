@@ -31,3 +31,6 @@ codegen-units = 1
 lto = true
 opt-level = "z"
 strip = true
+
+[dev-dependencies]
+rusqlite = { version = "0.31", features = ["bundled"] }
