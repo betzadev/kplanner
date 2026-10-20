@@ -1,0 +1,441 @@
+Build started at 2026-10-20T22:30:43Z
+Run: 39508630085 / Attempt: 1
+Ref: develop / SHA: 060f5eddaa5a2d12b6813daa9218af26843be950
+Event: push
+------------------------------------------------------------
+=== pnpm install (no frozen lockfile) ===
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +49
++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 49, reused 0, downloaded 43, added 26
+Progress: resolved 49, reused 0, downloaded 49, added 49, done
+
+dependencies:
++ @tauri-apps/api 2.12.4
++ @tauri-apps/plugin-haptics 2.4.2
++ @tauri-apps/plugin-notification 2.7.0
++ @tauri-apps/plugin-opener 2.7.2
++ lucide-react 1.59.0
++ react 19.3.1
++ react-dom 19.3.1
++ react-icons 5.7.0
++ zustand 5.0.15
+
+devDependencies:
++ @tailwindcss/vite 4.3.3
++ @tauri-apps/cli 2.12.3
++ @types/react 19.3.0
++ @types/react-dom 19.3.0
++ @vitejs/plugin-react 6.1.2
++ tailwindcss 4.3.3
++ typescript 6.0.3
++ vite 8.3.4
+
+Done in 1.8s using pnpm v10.34.7
+pnpm install exited with code: 0
+=== pnpm build ===
+
+> kplanner@0.1.0 build /home/runner/work/kplanner/kplanner
+> tsc && vite build
+
+[36mvite v8.3.4 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 1974 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.97 kB │ gzip:  0.47 kB
+dist/assets/index-Cjd_p1I0.css             74.91 kB │ gzip: 12.47 kB
+dist/assets/rolldown-runtime-WkwZ5CU-.js    0.59 kB │ gzip:  0.36 kB
+dist/assets/index-DTGmxyMK.js             195.50 kB │ gzip: 43.23 kB
+dist/assets/vendor-B-JPDFjQ.js            245.28 kB │ gzip: 77.82 kB
+
+[32m✓ built in 513ms[39m
+=== ENVIRONMENT CHECK ===
+ANDROID_HOME=/usr/local/lib/android/sdk
+ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+NDK version: Pkg.Revision = 27.3.13750724
+BUILD_TYPE=debug
+
+=== TAURI INFO ===
+
+> kplanner@0.1.0 tauri /home/runner/work/kplanner/kplanner
+> tauri info
+
+
+[✘] Environment
+    - OS: Ubuntu 22.4.0 x86_64 (X64) (Unknown DE on Unknown Session)
+    ✘ webkit2gtk-4.1: not installed
+      Visit https://v2.tauri.app/start/prerequisites/ to learn more about tauri prerequisites
+    ✔ rsvg2: 2.52.5
+    ✔ rustc: 1.99.1 (58cf8f9c3 2026-10-13)
+    ✔ cargo: 1.99.1 (5f94df478 2026-08-27)
+    ✔ rustup: 1.29.1 (d95a37b6a 2026-08-13)
+    ✔ Rust toolchain: stable-x86_64-unknown-linux-gnu (default)
+    - node: 22.23.3
+    - pnpm: 10.34.7
+    - yarn: 1.22.22
+    - npm: 10.9.9
+
+[-] Packages
+    - tauri 🦀: 2.12.4
+    - tauri-build 🦀: 2.7.3
+    - wry 🦀: 0.57.0
+    - tao 🦀: 0.37.1
+    - @tauri-apps/api  ⱼₛ: 2.12.4
+    - @tauri-apps/cli  ⱼₛ: 2.12.3
+
+[-] Plugins
+    - tauri-plugin-notification 🦀: 2.7.0
+    - @tauri-apps/plugin-notification  ⱼₛ: 2.7.0
+    - tauri-plugin-haptics 🦀: 2.4.2
+    - @tauri-apps/plugin-haptics  ⱼₛ: 2.4.2
+    - tauri-plugin-opener 🦀: 2.7.2
+    - @tauri-apps/plugin-opener  ⱼₛ: 2.7.2
+
+[-] App
+    - build-type: bundle
+    - CSP: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://*.turso.io wss://*.turso.io; frame-ancestors 'none'; object-src 'none';
+    - frontendDist: ../dist
+    - devUrl: http://localhost:1420/
+    - framework: React
+    - bundler: Vite
+=== TAURI ANDROID INIT ===
+
+> kplanner@0.1.0 tauri /home/runner/work/kplanner/kplanner
+> tauri android init --ci
+
+        Info Using installed NDK: /usr/local/lib/android/sdk/ndk/27.3.13750724
+        Info Installing Android Rust targets...
+        Info Installing target armv7-linux-androideabi
+info: downloading component rust-std
+        Info Installing target i686-linux-android
+info: downloading component rust-std
+        Info Installing target x86_64-linux-android
+info: downloading component rust-std
+Generating Android Studio project...
+        Info "/home/runner/work/kplanner/kplanner/src-tauri" relative to "/home/runner/work/kplanner/kplanner/src-tauri/gen/android/kplanner" is "../../../"
+victory: Project generated successfully!
+    Make cool apps! 🌻 🐕 🎉
+=== WRITE LOCAL.PROPERTIES ===
+sdk.dir=/usr/local/lib/android/sdk
+ndk.dir=/usr/local/lib/android/sdk/ndk/27.3.13750724
+=== GRADLEW CHMOD ===
+=== SIGNING CONFIG INJECTION ===
+Injected debug signing config into release build type.
+=== TAURI ANDROID BUILD (debug - aarch64-linux-android) ===
+
+> kplanner@0.1.0 tauri /home/runner/work/kplanner/kplanner
+> tauri android build --debug --apk --target aarch64-linux-android --verbose
+
+error: invalid value 'aarch64-linux-android' for '--target [<TARGETS>...]'
+  [possible values: aarch64, armv7, i686, x86_64]
+
+  tip: a similar value exists: 'aarch64'
+
+For more information, try '--help'.
+ ELIFECYCLE  Command failed with exit code 2.
+=== FAILED BUILD DIAGNOSTICS ===
+--- pwd ---
+/home/runner/work/kplanner/kplanner
+--- ls root ---
+total 128
+drwxr-xr-x 11 runner runner  4096 Oct 20 22:31 .
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:30 ..
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:30 .agents
+-rw-r--r--  1 runner runner    94 Oct 20 22:30 .env.example
+drwxr-xr-x  7 runner runner  4096 Oct 20 22:30 .git
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:30 .github
+-rw-r--r--  1 runner runner   429 Oct 20 22:30 .gitignore
+drwxr-xr-x  2 runner runner  4096 Oct 20 22:30 .vscode
+-rw-r--r--  1 runner runner  5800 Oct 20 22:30 README.md
+-rw-r--r--  1 runner runner  4993 Oct 20 22:32 build.log
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:31 dist
+-rw-r--r--  1 runner runner   713 Oct 20 22:30 index.html
+drwxr-xr-x  9 runner runner  4096 Oct 20 22:31 node_modules
+-rw-r--r--  1 runner runner   809 Oct 20 22:30 package.json
+-rw-r--r--  1 runner runner 35926 Oct 20 22:30 pnpm-lock.yaml
+drwxr-xr-x  2 runner runner  4096 Oct 20 22:30 public
+-rw-r--r--  1 runner runner   284 Oct 20 22:30 skills-lock.json
+drwxr-xr-x  9 runner runner  4096 Oct 20 22:30 src
+drwxr-xr-x  6 runner runner  4096 Oct 20 22:32 src-tauri
+-rw-r--r--  1 runner runner   589 Oct 20 22:30 tsconfig.json
+-rw-r--r--  1 runner runner   246 Oct 20 22:30 tsconfig.node.json
+-rw-r--r--  1 runner runner  1200 Oct 20 22:30 vite.config.ts
+--- pnpm-lock.yaml search ---
+./pnpm-lock.yaml
+--- package.json ---
+{
+  "name": "kplanner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-haptics": "^2.4.2",
+    "@tauri-apps/plugin-notification": "^2.7.0",
+    "@tauri-apps/plugin-opener": "^2",
+    "lucide-react": "^1.59.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-icons": "^5.7.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}
+--- Rust target check ---
+aarch64-linux-android
+armv7-linux-androideabi
+i686-linux-android
+x86_64-linux-android
+x86_64-unknown-linux-gnu
+--- NDK directory ---
+total 1400
+drwxrwxrwx 11 root root   4096 Oct 12 21:58 .
+drwxrwxrwx  6 root root   4096 Oct 20 22:31 ..
+-rwxrwxrwx  1 root root   8019 Oct 12 21:58 CHANGELOG.md
+-rwxrwxrwx  1 root root 522923 Oct 12 21:58 NOTICE
+-rwxrwxrwx  1 root root 806124 Oct 12 21:58 NOTICE.toolchain
+-rwxrwxrwx  1 root root    730 Oct 12 21:57 README.md
+drwxrwxrwx  6 root root   4096 Oct 12 21:58 build
+drwxrwxrwx  2 root root   4096 Oct 12 21:57 meta
+-rwxrwxrwx  1 root root     73 Oct 12 21:58 ndk-build
+-rwxrwxrwx  1 root root     91 Oct 12 21:58 ndk-gdb
+-rwxrwxrwx  1 root root     91 Oct 12 21:57 ndk-lldb
+-rwxrwxrwx  1 root root     93 Oct 12 21:58 ndk-stack
+-rwxrwxrwx  1 root root     93 Oct 12 21:57 ndk-which
+-rwxrwxrwx  1 root root  18351 Oct 12 21:58 package.xml
+drwxrwxrwx  3 root root   4096 Oct 12 21:58 prebuilt
+drwxrwxrwx  6 root root   4096 Oct 12 21:58 python-packages
+drwxrwxrwx  3 root root   4096 Oct 12 21:57 shader-tools
+drwxrwxrwx  8 root root   4096 Oct 12 21:58 simpleperf
+-rwxrwxrwx  1 root root    108 Oct 12 21:58 source.properties
+drwxrwxrwx  5 root root   4096 Oct 12 21:58 sources
+drwxrwxrwx  3 root root   4096 Oct 12 21:57 toolchains
+drwxrwxrwx  2 root root   4096 Oct 12 21:57 wrap.sh
+--- Android project tree ---
+total 60
+drwxr-xr-x 5 runner runner 4096 Oct 20 22:32 .
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 ..
+-rw-r--r-- 1 runner runner  230 Oct 20 22:32 .editorconfig
+-rw-r--r-- 1 runner runner  290 Oct 20 22:32 .gitignore
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 app
+-rw-r--r-- 1 runner runner  376 Oct 20 22:32 build.gradle.kts
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 buildSrc
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 gradle
+-rw-r--r-- 1 runner runner 1241 Oct 20 22:32 gradle.properties
+-rwxr-xr-x 1 runner runner 8656 Oct 20 22:32 gradlew
+-rw-r--r-- 1 runner runner 2766 Oct 20 22:32 gradlew.bat
+-rw-r--r-- 1 runner runner   88 Oct 20 22:32 local.properties
+-rw-r--r-- 1 runner runner   52 Oct 20 22:32 settings.gradle
+total 24
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 .
+drwxr-xr-x 5 runner runner 4096 Oct 20 22:32 ..
+-rw-r--r-- 1 runner runner  143 Oct 20 22:32 .gitignore
+-rw-r--r-- 1 runner runner 2514 Oct 20 22:32 build.gradle.kts
+-rw-r--r-- 1 runner runner  750 Oct 20 22:32 proguard-rules.pro
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 src
+--- local.properties ---
+sdk.dir=/usr/local/lib/android/sdk
+ndk.dir=/usr/local/lib/android/sdk/ndk/27.3.13750724
+--- build.gradle.kts signingConfigs block ---
+            signingConfig = signingConfigs.getByName("debug")
+            optimization {
+               enable = true
+            }
+            proguardFiles(
+                *fileTree(".") {
+                  include("**/*.pro")
+                  exclude("build/**")
+                }.files.toTypedArray()
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    buildFeatures {
+        buildConfig = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_1_8
+    }
+}
+
+rust {
+    rootDirRel = "../../../"
+}
+
+--- Last 150 lines of build.log ---
+--- pwd ---
+/home/runner/work/kplanner/kplanner
+--- ls root ---
+total 128
+drwxr-xr-x 11 runner runner  4096 Oct 20 22:31 .
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:30 ..
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:30 .agents
+-rw-r--r--  1 runner runner    94 Oct 20 22:30 .env.example
+drwxr-xr-x  7 runner runner  4096 Oct 20 22:30 .git
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:30 .github
+-rw-r--r--  1 runner runner   429 Oct 20 22:30 .gitignore
+drwxr-xr-x  2 runner runner  4096 Oct 20 22:30 .vscode
+-rw-r--r--  1 runner runner  5800 Oct 20 22:30 README.md
+-rw-r--r--  1 runner runner  4993 Oct 20 22:32 build.log
+drwxr-xr-x  3 runner runner  4096 Oct 20 22:31 dist
+-rw-r--r--  1 runner runner   713 Oct 20 22:30 index.html
+drwxr-xr-x  9 runner runner  4096 Oct 20 22:31 node_modules
+-rw-r--r--  1 runner runner   809 Oct 20 22:30 package.json
+-rw-r--r--  1 runner runner 35926 Oct 20 22:30 pnpm-lock.yaml
+drwxr-xr-x  2 runner runner  4096 Oct 20 22:30 public
+-rw-r--r--  1 runner runner   284 Oct 20 22:30 skills-lock.json
+drwxr-xr-x  9 runner runner  4096 Oct 20 22:30 src
+drwxr-xr-x  6 runner runner  4096 Oct 20 22:32 src-tauri
+-rw-r--r--  1 runner runner   589 Oct 20 22:30 tsconfig.json
+-rw-r--r--  1 runner runner   246 Oct 20 22:30 tsconfig.node.json
+-rw-r--r--  1 runner runner  1200 Oct 20 22:30 vite.config.ts
+--- pnpm-lock.yaml search ---
+./pnpm-lock.yaml
+--- package.json ---
+{
+  "name": "kplanner",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-haptics": "^2.4.2",
+    "@tauri-apps/plugin-notification": "^2.7.0",
+    "@tauri-apps/plugin-opener": "^2",
+    "lucide-react": "^1.59.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-icons": "^5.7.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^6.0.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
+    "vite": "^8.0.16"
+  }
+}
+--- Rust target check ---
+aarch64-linux-android
+armv7-linux-androideabi
+i686-linux-android
+x86_64-linux-android
+x86_64-unknown-linux-gnu
+--- NDK directory ---
+total 1400
+drwxrwxrwx 11 root root   4096 Oct 12 21:58 .
+drwxrwxrwx  6 root root   4096 Oct 20 22:31 ..
+-rwxrwxrwx  1 root root   8019 Oct 12 21:58 CHANGELOG.md
+-rwxrwxrwx  1 root root 522923 Oct 12 21:58 NOTICE
+-rwxrwxrwx  1 root root 806124 Oct 12 21:58 NOTICE.toolchain
+-rwxrwxrwx  1 root root    730 Oct 12 21:57 README.md
+drwxrwxrwx  6 root root   4096 Oct 12 21:58 build
+drwxrwxrwx  2 root root   4096 Oct 12 21:57 meta
+-rwxrwxrwx  1 root root     73 Oct 12 21:58 ndk-build
+-rwxrwxrwx  1 root root     91 Oct 12 21:58 ndk-gdb
+-rwxrwxrwx  1 root root     91 Oct 12 21:57 ndk-lldb
+-rwxrwxrwx  1 root root     93 Oct 12 21:58 ndk-stack
+-rwxrwxrwx  1 root root     93 Oct 12 21:57 ndk-which
+-rwxrwxrwx  1 root root  18351 Oct 12 21:58 package.xml
+drwxrwxrwx  3 root root   4096 Oct 12 21:58 prebuilt
+drwxrwxrwx  6 root root   4096 Oct 12 21:58 python-packages
+drwxrwxrwx  3 root root   4096 Oct 12 21:57 shader-tools
+drwxrwxrwx  8 root root   4096 Oct 12 21:58 simpleperf
+-rwxrwxrwx  1 root root    108 Oct 12 21:58 source.properties
+drwxrwxrwx  5 root root   4096 Oct 12 21:58 sources
+drwxrwxrwx  3 root root   4096 Oct 12 21:57 toolchains
+drwxrwxrwx  2 root root   4096 Oct 12 21:57 wrap.sh
+--- Android project tree ---
+total 60
+drwxr-xr-x 5 runner runner 4096 Oct 20 22:32 .
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 ..
+-rw-r--r-- 1 runner runner  230 Oct 20 22:32 .editorconfig
+-rw-r--r-- 1 runner runner  290 Oct 20 22:32 .gitignore
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 app
+-rw-r--r-- 1 runner runner  376 Oct 20 22:32 build.gradle.kts
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 buildSrc
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 gradle
+-rw-r--r-- 1 runner runner 1241 Oct 20 22:32 gradle.properties
+-rwxr-xr-x 1 runner runner 8656 Oct 20 22:32 gradlew
+-rw-r--r-- 1 runner runner 2766 Oct 20 22:32 gradlew.bat
+-rw-r--r-- 1 runner runner   88 Oct 20 22:32 local.properties
+-rw-r--r-- 1 runner runner   52 Oct 20 22:32 settings.gradle
+total 24
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 .
+drwxr-xr-x 5 runner runner 4096 Oct 20 22:32 ..
+-rw-r--r-- 1 runner runner  143 Oct 20 22:32 .gitignore
+-rw-r--r-- 1 runner runner 2514 Oct 20 22:32 build.gradle.kts
+-rw-r--r-- 1 runner runner  750 Oct 20 22:32 proguard-rules.pro
+drwxr-xr-x 3 runner runner 4096 Oct 20 22:32 src
+--- local.properties ---
+sdk.dir=/usr/local/lib/android/sdk
+ndk.dir=/usr/local/lib/android/sdk/ndk/27.3.13750724
+--- build.gradle.kts signingConfigs block ---
+            signingConfig = signingConfigs.getByName("debug")
+            optimization {
+               enable = true
+            }
+            proguardFiles(
+                *fileTree(".") {
+                  include("**/*.pro")
+                  exclude("build/**")
+                }.files.toTypedArray()
+            )
+        }
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+    buildFeatures {
+        buildConfig = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_1_8
+    }
+}
+
+rust {
+    rootDirRel = "../../../"
+}
+
+--- Last 150 lines of build.log ---
+------------------------------------------------------------
+Build finished at 2026-10-20T22:32:03Z
