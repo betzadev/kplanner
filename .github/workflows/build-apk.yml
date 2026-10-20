@@ -22,15 +22,18 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      # Step 1: Checkout repository using actions/checkout@v5 (Node.js 24 runtime)
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
+      # Step 2: Setup Java JDK 17 using actions/setup-java@v5 (resolves setup-java v4 deprecation)
       - name: Setup Java JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '17'
 
+      # Step 3: Setup Android NDK and SDK Environment, targeting NDK 27 (LTS for AGP & Tauri v2)
       - name: Setup Android NDK and SDK Environment
         run: |
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
@@ -40,56 +43,70 @@ jobs:
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
-          # Accept licenses
+          # Accept Android licenses
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
-          # Find existing NDK or install one if not present
-          if [ -d "$ANDROID_SDK_ROOT/ndk" ] && [ -n "$(ls -A "$ANDROID_SDK_ROOT/ndk" 2>/dev/null)" ]; then
-            NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk"/* | sort -V | tail -n 1)
-          else
-            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.1.10909125"
-            NDK_PATH="$ANDROID_SDK_ROOT/ndk/26.1.10909125"
+          # Target NDK 27 (LTS required by AGP and Tauri v2; avoids experimental/canary NDK 30)
+          NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk/27."* 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -z "$NDK_PATH" ]; then
+            echo "NDK 27 not found pre-installed. Installing NDK 27 via sdkmanager..."
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.2.12479018" || \
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" || true
+            NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk/27."* 2>/dev/null | sort -V | tail -n 1 || ls -d "$ANDROID_SDK_ROOT/ndk"/* 2>/dev/null | sort -V | tail -n 1)
           fi
 
           echo "NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
           echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
-          echo "Detected NDK at: $NDK_PATH"
+          echo "Configured NDK at: $NDK_PATH"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
+      # Step 4: Setup pnpm using pnpm/action-setup@v5
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10
 
-      - name: Install dependencies
-        run: pnpm install
+      # Step 5: Setup Node.js using actions/setup-node@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: 'pnpm'
 
+      # Step 6: Install JavaScript dependencies
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile || pnpm install
+
+      # Step 7: Install Rust toolchain with aarch64-linux-android target
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
 
+      # Step 8: Build Web Frontend
       - name: Build Web Frontend
         run: pnpm build
 
+      # Step 9: Ensure Android Debug Keystore Exists for signing
       - name: Ensure Android Debug Keystore Exists
         run: |
           mkdir -p ~/.android
           if [ ! -f ~/.android/debug.keystore ]; then
-            echo "Generating debug keystore..."
+            echo "Generating standard debug keystore..."
             keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "Debug keystore already present."
           fi
 
+      # Step 10: Initialize Android Project, configure NDK, inject debug signing config, and build APK
       - name: Initialize Android Project and Build APK
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
           NDK_HOME: ${{ env.NDK_HOME }}
+          ANDROID_NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
           BUILD_TYPE: ${{ github.event.inputs.build_type || 'debug' }}
         run: |
           set -euo pipefail
@@ -97,10 +114,20 @@ jobs:
             echo "=== TAURI INFO ==="
             pnpm tauri info || true
 
+            echo "=== PRE-CONFIGURE LOCAL.PROPERTIES FOR NDK 27 ==="
+            mkdir -p src-tauri/gen/android
+            echo "sdk.dir=$ANDROID_HOME" > src-tauri/gen/android/local.properties
+            echo "ndk.dir=$NDK_HOME" >> src-tauri/gen/android/local.properties
+            cat src-tauri/gen/android/local.properties
+
             echo "=== TAURI ANDROID INIT ==="
-            if [ ! -d "src-tauri/gen/android" ]; then
+            if [ ! -d "src-tauri/gen/android/app" ]; then
               pnpm tauri android init --ci
             fi
+
+            # Re-ensure local.properties strictly points to NDK 27 after init
+            echo "sdk.dir=$ANDROID_HOME" > src-tauri/gen/android/local.properties
+            echo "ndk.dir=$NDK_HOME" >> src-tauri/gen/android/local.properties
 
             echo "=== GRADLEW CHMOD & SIGNING CONFIG INJECTION ==="
             if [ -f "src-tauri/gen/android/gradlew" ]; then
@@ -109,18 +136,7 @@ jobs:
 
             GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
             if [ -f "$GRADLE_APP" ]; then
-              python3 -c '
-              import pathlib
-              p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts")
-              c = p.read_text()
-              if "signingConfig = signingConfigs.getByName(\"debug\")" not in c:
-                  c = c.replace(
-                      "getByName(\"release\") {",
-                      "getByName(\"release\") {\n            signingConfig = signingConfigs.getByName(\"debug\")"
-                  )
-                  p.write_text(c)
-                  print("Injected debug signing config into release build type.")
-              '
+              python3 -c 'import pathlib; p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts"); c = p.read_text(); p.write_text(c.replace("getByName(\"release\") {", "getByName(\"release\") {\n            signingConfig = signingConfigs.getByName(\"debug\")")) if "signingConfigs.getByName(\"debug\")" not in c else None; print("Gradle release signingConfig injection check completed.")'
             fi
 
             echo "=== TAURI ANDROID BUILD ($BUILD_TYPE - aarch64) ==="
@@ -131,6 +147,7 @@ jobs:
             fi
           ) 2>&1 | tee build.log
 
+      # Step 11: Push Build Log to ci-logs Branch for diagnostic traceability
       - name: Push Build Log to ci-logs Branch
         if: always()
         run: |
@@ -141,8 +158,9 @@ jobs:
           git commit -m "ci: capture build log" || true
           git push -f origin ci-logs || true
 
+      # Step 12: Upload APK Artifact using actions/upload-artifact@v5
       - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: kplanner-apk
           path: |
