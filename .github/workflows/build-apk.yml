@@ -28,12 +28,27 @@ jobs:
 
     steps:
       # Step 1: Checkout repository (Node.js 24 runtime, no deprecation warnings)
+      # fetch-depth: 0 ensures full history for branch operations in ci-logs push step
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pre-create build.log so the "Push Build Log" step never fails with
+      # git exit code 128 (pathspec didn't match) when an early step aborts.
+      - name: Initialize build log
+        run: |
+          echo "Build started at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > build.log
+          echo "Run: ${{ github.run_id }} / Attempt: ${{ github.run_attempt }}" >> build.log
+          echo "Ref: ${{ github.ref_name }} / SHA: ${{ github.sha }}" >> build.log
+          echo "------------------------------------------------------------" >> build.log
 
       # Step 2: Install Linux system dependencies required by Android SDK tools
       # (libncurses5 is not shipped on Ubuntu 22.04 and is required by some NDK binaries)
+      # continue-on-error: true ensures a transient apt issue never aborts the whole build
       - name: Install system dependencies
+        continue-on-error: true
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
@@ -110,9 +125,24 @@ jobs:
           node-version: 22
           cache: 'pnpm'
 
-      # Step 7: Install JavaScript dependencies (frozen lockfile, with fallback)
+      # Step 7: Install JavaScript dependencies
+      # IMPORTANT: pnpm exits 100 on --frozen-lockfile when lockfile is out of sync
+      # with package.json. We try frozen first (CI best practice), then fall back
+      # to a regular install. The `set +e` + explicit handling avoids propagating
+      # exit 100 to the job.
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile || pnpm install
+        run: |
+          set +e
+          echo "Attempting frozen lockfile install (CI best practice)..." | tee -a build.log
+          pnpm install --frozen-lockfile 2>&1 | tee -a build.log
+          FROZEN_EXIT=${PIPESTATUS[0]}
+          if [ "$FROZEN_EXIT" -ne 0 ]; then
+            echo "::warning::pnpm --frozen-lockfile failed (exit $FROZEN_EXIT). Falling back to regular install."
+            echo "Lockfile is out of sync with package.json — please commit an updated pnpm-lock.yaml."
+            pnpm install 2>&1 | tee -a build.log
+            exit ${PIPESTATUS[0]}
+          fi
+          exit 0
 
       # Step 8: Install Rust toolchain with the Android aarch64 target
       - name: Install Rust toolchain
@@ -122,7 +152,7 @@ jobs:
 
       # Step 9: Build Web Frontend (must succeed before Tauri build)
       - name: Build Web Frontend
-        run: pnpm build
+        run: pnpm build 2>&1 | tee -a build.log
 
       # Step 10: Ensure Android Debug Keystore exists (standard, used for both debug and release fallback)
       - name: Ensure Android Debug Keystore Exists
@@ -226,37 +256,62 @@ jobs:
 
             echo "=== APK OUTPUT LISTING ==="
             find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \;
-          ) 2>&1 | tee build.log
+          ) 2>&1 | tee -a build.log
 
       # Step 12: On failure, dump diagnostic info before the log is pushed
       - name: Diagnostics on failure
         if: failure()
         run: |
-          echo "=== FAILED BUILD DIAGNOSTICS ==="
-          echo "--- Rust target check ---"
-          rustup target list --installed || true
-          echo "--- NDK directory ---"
-          ls -la "$NDK_HOME" 2>/dev/null || true
-          echo "--- Android project tree ---"
-          ls -la src-tauri/gen/android/ 2>/dev/null || true
-          ls -la src-tauri/gen/android/app/ 2>/dev/null || true
-          echo "--- local.properties ---"
-          cat src-tauri/gen/android/local.properties 2>/dev/null || true
-          echo "--- build.gradle.kts (signingConfigs block) ---"
-          grep -A 30 "signingConfigs" src-tauri/gen/android/app/build.gradle.kts 2>/dev/null || true
-          echo "--- Last 100 lines of build.log ---"
-          tail -n 100 build.log || true
+          {
+            echo "=== FAILED BUILD DIAGNOSTICS ==="
+            echo "--- Rust target check ---"
+            rustup target list --installed || true
+            echo "--- NDK directory ---"
+            ls -la "$NDK_HOME" 2>/dev/null || true
+            echo "--- Android project tree ---"
+            ls -la src-tauri/gen/android/ 2>/dev/null || true
+            ls -la src-tauri/gen/android/app/ 2>/dev/null || true
+            echo "--- local.properties ---"
+            cat src-tauri/gen/android/local.properties 2>/dev/null || true
+            echo "--- build.gradle.kts (signingConfigs block) ---"
+            grep -A 30 "signingConfigs" src-tauri/gen/android/app/build.gradle.kts 2>/dev/null || true
+            echo "--- Last 100 lines of build.log ---"
+            tail -n 100 build.log 2>/dev/null || echo "(build.log not found)"
+          } | tee -a build.log
 
       # Step 13: Push Build Log to ci-logs Branch for diagnostic traceability
+      # This step is best-effort: it MUST NOT fail the job even if git operations fail.
+      # continue-on-error: true guarantees the job's overall exit code reflects only
+      # the actual build, never the log-pushing sidecar.
       - name: Push Build Log to ci-logs Branch
         if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Ensure build.log exists even if an earlier step crashed before creating it
+          if [ ! -f build.log ]; then
+            echo "build.log was not created by any prior step — creating empty placeholder." > build.log
+          fi
+          # Append final status marker
+          echo "------------------------------------------------------------" >> build.log
+          echo "Build finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> build.log
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Use the GITHUB_TOKEN authenticated remote so push works without PAT
+          REPO="${{ github.repository }}"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+          # Detach any local mods (e.g. local.properties, build.gradle.kts injections)
+          # so checkout -B can switch branches cleanly without exit 128 conflicts.
+          git stash --include-untracked -q || true
           git checkout -B ci-logs
+
           git add -f build.log
-          git commit -m "ci: capture build log" || true
-          git push -f origin ci-logs || true
+          git commit -m "ci: capture build log (run ${{ github.run_id }})" || true
+          git push -f origin ci-logs || echo "::warning::Could not push ci-logs branch (permissions or protected branch)."
 
       # Step 14: Upload APK Artifact (Node.js 24 runtime)
       - name: Upload APK Artifact
