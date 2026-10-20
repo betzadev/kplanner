@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-android:
     runs-on: ubuntu-22.04
@@ -72,13 +75,33 @@ jobs:
           NDK_HOME: ${{ env.NDK_HOME }}
         run: |
           pnpm tauri info
-          if [ ! -d "src-tauri/gen/android" ]; then
-            pnpm tauri android init --ci
-          fi
-          if [ -f "src-tauri/gen/android/gradlew" ]; then
-            chmod +x src-tauri/gen/android/gradlew
-          fi
-          pnpm tauri android build --apk --target aarch64 --debug
+          (
+            echo "=== TAURI INFO ==="
+            pnpm tauri info || true
+            
+            echo "=== TAURI ANDROID INIT ==="
+            if [ ! -d "src-tauri/gen/android" ]; then
+              pnpm tauri android init --ci
+            fi
+            
+            echo "=== GRADLEW CHMOD ==="
+            if [ -f "src-tauri/gen/android/gradlew" ]; then
+              chmod +x src-tauri/gen/android/gradlew
+            fi
+            
+            echo "=== TAURI ANDROID BUILD ==="
+            pnpm tauri android build --apk --target aarch64 --debug
+          ) 2>&1 | tee build.log
+
+      - name: Push Build Log to ci-logs Branch
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci-logs
+          git add -f build.log
+          git commit -m "ci: capture build log" || true
+          git push -f origin ci-logs || true
 
       - name: Upload APK Artifact
         if: always()
