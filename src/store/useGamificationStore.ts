@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { usePlannerStore } from './usePlannerStore';
 import { toDateString } from '../utils/timeSlotMapper';
 import { DailyQuest } from '../types';
+import { tauriApi } from '../services/tauriApi';
 
 export interface StreakMilestone {
   id: string;
@@ -59,6 +60,7 @@ export const AVAILABLE_STAMPS: Array<{ id: string; name: string; priceGems: numb
   { id: 'Early Bird', name: 'Early Bird', priceGems: 80, icon: '🌅' },
   { id: 'Deep Work', name: 'Deep Work', priceGems: 100, icon: '⚡' },
   { id: 'Perseverance', name: 'Perseverance', priceGems: 120, icon: '🌱' },
+  { id: 'Master Scholar', name: 'Master Scholar', priceGems: 0, icon: '👑' },
 ];
 
 export const AVAILABLE_CHIMES: Array<{ id: string; name: string; priceGems: number; description: string }> = [
@@ -68,12 +70,59 @@ export const AVAILABLE_CHIMES: Array<{ id: string; name: string; priceGems: numb
   { id: 'retro', name: 'Retro 8-Bit', priceGems: 100, description: 'Chiptune victory arpeggio' },
 ];
 
+export interface WeeklyChestInfo {
+  id: 'bronze' | 'silver' | 'gold';
+  hoursRequired: number;
+  minutesRequired: number;
+  title: string;
+  gemReward: number;
+  xpReward: number;
+  stampUnlock?: string;
+}
+
+export const WEEKLY_CHESTS: WeeklyChestInfo[] = [
+  {
+    id: 'bronze',
+    hoursRequired: 10,
+    minutesRequired: 600,
+    title: 'Bronze Chest',
+    gemReward: 50,
+    xpReward: 100,
+  },
+  {
+    id: 'silver',
+    hoursRequired: 20,
+    minutesRequired: 1200,
+    title: 'Silver Chest',
+    gemReward: 120,
+    xpReward: 250,
+  },
+  {
+    id: 'gold',
+    hoursRequired: 35,
+    minutesRequired: 2100,
+    title: 'Gold Chest',
+    gemReward: 300,
+    xpReward: 500,
+    stampUnlock: 'Master Scholar',
+  },
+];
+
+export function getCurrentWeekMonday(refDate: Date = new Date()): string {
+  const d = new Date(refDate);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  return toDateString(d);
+}
+
 export interface GamificationState {
   xp: number;
   gems: number;
   streakFreezes: number;
   dailyGoalMinutes: number;
   claimedMilestones: string[];
+  claimedWeeklyChests: string[];
   unlockedThemes: string[];
   unlockedStamps: string[];
   unlockedChimes: string[];
@@ -85,12 +134,15 @@ export interface GamificationActions {
   awardXp: (amount: number) => void;
   awardGems: (amount: number) => void;
   claimMilestone: (id: string) => void;
+  claimWeeklyChest: (chestId: 'bronze' | 'silver' | 'gold') => boolean;
+  getWeeklyStudyMinutes: () => number;
   buyStreakFreeze: () => boolean;
   buyTheme: (themeId: string, cost: number) => boolean;
   buyStamp: (stampId: string, cost: number) => boolean;
   buyChime: (chimeId: string, cost: number) => boolean;
   setDailyGoalMinutes: (mins: number) => void;
   initDailyQuests: () => void;
+  initFromRust: () => Promise<void>;
   advanceQuest: (questId: string, amount: number) => void;
   claimQuest: (questId: string) => void;
   calculateStreak: () => {
@@ -171,6 +223,27 @@ function createDefaultQuests(): DailyQuest[] {
   ];
 }
 
+let gamificationSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+function scheduleSaveGamificationToRust(state: GamificationState) {
+  if (gamificationSaveTimeout) clearTimeout(gamificationSaveTimeout);
+  gamificationSaveTimeout = setTimeout(() => {
+    const payload = JSON.stringify({
+      xp: state.xp,
+      gems: state.gems,
+      streakFreezes: state.streakFreezes,
+      dailyGoalMinutes: state.dailyGoalMinutes,
+      claimedMilestones: state.claimedMilestones,
+      claimedWeeklyChests: state.claimedWeeklyChests,
+      unlockedThemes: state.unlockedThemes,
+      unlockedStamps: state.unlockedStamps,
+      unlockedChimes: state.unlockedChimes,
+      dailyQuests: state.dailyQuests,
+      lastQuestDate: state.lastQuestDate,
+    });
+    tauriApi.saveGamificationProfile(payload);
+  }, 250);
+}
+
 export const useGamificationStore = create<GamificationStore>()(
   persist(
     (set, get) => ({
@@ -179,6 +252,7 @@ export const useGamificationStore = create<GamificationStore>()(
       streakFreezes: 1,
       dailyGoalMinutes: 30,
       claimedMilestones: [],
+      claimedWeeklyChests: [],
       unlockedThemes: ['dreamy_pastel'],
       unlockedStamps: ['100% Focus'],
       unlockedChimes: ['default'],
@@ -187,10 +261,12 @@ export const useGamificationStore = create<GamificationStore>()(
 
       awardXp: (amount: number) => {
         set((state) => ({ xp: state.xp + amount }));
+        scheduleSaveGamificationToRust(get());
       },
 
       awardGems: (amount: number) => {
         set((state) => ({ gems: state.gems + amount }));
+        scheduleSaveGamificationToRust(get());
       },
 
       claimMilestone: (id: string) => {
@@ -204,6 +280,61 @@ export const useGamificationStore = create<GamificationStore>()(
           gems: (state.gems || 0) + milestone.gemReward,
           xp: (state.xp || 0) + milestone.xpReward,
         }));
+        scheduleSaveGamificationToRust(get());
+      },
+
+      getWeeklyStudyMinutes: () => {
+        const sheets = usePlannerStore.getState().dailySheets || {};
+        const mondayStr = getCurrentWeekMonday(new Date());
+        const mondayDate = new Date(mondayStr + 'T00:00:00');
+        let totalMinutes = 0;
+
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(mondayDate);
+          d.setDate(mondayDate.getDate() + i);
+          const dStr = toDateString(d);
+          const sheet = sheets[dStr];
+          if (sheet) {
+            if (sheet.totalMinutesStudied) {
+              totalMinutes += sheet.totalMinutesStudied;
+            } else if (sheet.timeGrid) {
+              Object.values(sheet.timeGrid).forEach((c) => {
+                if (c.subjectId) totalMinutes += Math.round(10 * (c.fillRatio ?? 1.0));
+              });
+            }
+          }
+        }
+        return totalMinutes;
+      },
+
+      claimWeeklyChest: (chestId: 'bronze' | 'silver' | 'gold') => {
+        const chest = WEEKLY_CHESTS.find((c) => c.id === chestId);
+        if (!chest) return false;
+
+        const mondayStr = getCurrentWeekMonday(new Date());
+        const weekKey = `${chestId}_${mondayStr}`;
+        const claimed = get().claimedWeeklyChests || [];
+        if (claimed.includes(weekKey)) return false;
+
+        const weeklyMins = get().getWeeklyStudyMinutes();
+        if (weeklyMins < chest.minutesRequired) return false;
+
+        set((state) => {
+          const newUnlockedStamps = [...(state.unlockedStamps || ['100% Focus'])];
+          if (chest.stampUnlock && !newUnlockedStamps.includes(chest.stampUnlock)) {
+            newUnlockedStamps.push(chest.stampUnlock);
+          }
+
+          return {
+            claimedWeeklyChests: [...(state.claimedWeeklyChests || []), weekKey],
+            gems: (state.gems || 0) + chest.gemReward,
+            xp: (state.xp || 0) + chest.xpReward,
+            unlockedStamps: newUnlockedStamps,
+          };
+        });
+
+        scheduleSaveGamificationToRust(get());
+        return true;
       },
 
       buyStreakFreeze: () => {
@@ -213,6 +344,7 @@ export const useGamificationStore = create<GamificationStore>()(
           gems: (state.gems || 0) - cost,
           streakFreezes: (state.streakFreezes || 0) + 1,
         }));
+        scheduleSaveGamificationToRust(get());
         return true;
       },
 
@@ -223,6 +355,7 @@ export const useGamificationStore = create<GamificationStore>()(
           gems: (state.gems || 0) - cost,
           unlockedThemes: [...(state.unlockedThemes || ['dreamy_pastel']), themeId],
         }));
+        scheduleSaveGamificationToRust(get());
         return true;
       },
 
@@ -233,6 +366,7 @@ export const useGamificationStore = create<GamificationStore>()(
           gems: (state.gems || 0) - cost,
           unlockedStamps: [...(state.unlockedStamps || ['100% Focus']), stampId],
         }));
+        scheduleSaveGamificationToRust(get());
         return true;
       },
 
@@ -243,11 +377,37 @@ export const useGamificationStore = create<GamificationStore>()(
           gems: (state.gems || 0) - cost,
           unlockedChimes: [...(state.unlockedChimes || ['default']), chimeId],
         }));
+        scheduleSaveGamificationToRust(get());
         return true;
       },
 
       setDailyGoalMinutes: (mins: number) => {
         set({ dailyGoalMinutes: mins });
+      },
+
+      initFromRust: async () => {
+        try {
+          const profileJson = await tauriApi.loadGamificationProfile();
+          if (profileJson) {
+            const parsed = JSON.parse(profileJson);
+            set((current) => ({
+              ...current,
+              xp: typeof parsed.xp === 'number' ? parsed.xp : current.xp,
+              gems: typeof parsed.gems === 'number' ? parsed.gems : current.gems,
+              streakFreezes: typeof parsed.streakFreezes === 'number' ? parsed.streakFreezes : current.streakFreezes,
+              dailyGoalMinutes: typeof parsed.dailyGoalMinutes === 'number' ? parsed.dailyGoalMinutes : current.dailyGoalMinutes,
+              claimedMilestones: Array.isArray(parsed.claimedMilestones) ? parsed.claimedMilestones : current.claimedMilestones,
+              claimedWeeklyChests: Array.isArray(parsed.claimedWeeklyChests) ? parsed.claimedWeeklyChests : current.claimedWeeklyChests,
+              unlockedThemes: Array.isArray(parsed.unlockedThemes) && parsed.unlockedThemes.length > 0 ? parsed.unlockedThemes : current.unlockedThemes,
+              unlockedStamps: Array.isArray(parsed.unlockedStamps) && parsed.unlockedStamps.length > 0 ? parsed.unlockedStamps : current.unlockedStamps,
+              unlockedChimes: Array.isArray(parsed.unlockedChimes) && parsed.unlockedChimes.length > 0 ? parsed.unlockedChimes : current.unlockedChimes,
+              dailyQuests: Array.isArray(parsed.dailyQuests) && parsed.dailyQuests.length > 0 ? parsed.dailyQuests : current.dailyQuests,
+              lastQuestDate: typeof parsed.lastQuestDate === 'string' ? parsed.lastQuestDate : current.lastQuestDate,
+            }));
+          }
+        } catch (e) {
+          console.warn('Failed to load gamification profile from Rust:', e);
+        }
       },
 
       initDailyQuests: () => {
@@ -258,6 +418,7 @@ export const useGamificationStore = create<GamificationStore>()(
             dailyQuests: createDefaultQuests(),
             lastQuestDate: todayStr,
           });
+          scheduleSaveGamificationToRust(get());
         }
       },
 
@@ -280,6 +441,7 @@ export const useGamificationStore = create<GamificationStore>()(
       },
 
       claimQuest: (questId: string) => {
+        scheduleSaveGamificationToRust(get());
         const quests = get().dailyQuests || [];
         const quest = quests.find((q) => q.id === questId);
         if (!quest || !quest.isCompleted || quest.isClaimed) return;
@@ -294,7 +456,7 @@ export const useGamificationStore = create<GamificationStore>()(
       },
 
       calculateStreak: () => {
-        const sheets = usePlannerStore.getState().dailySheets;
+        const sheets = usePlannerStore.getState().dailySheets || {};
         const today = new Date();
         const todayStr = toDateString(today);
 
@@ -336,7 +498,7 @@ export const useGamificationStore = create<GamificationStore>()(
           currentCheck.setDate(currentCheck.getDate() - 1);
         }
 
-        while (true) {
+        for (let safety = 0; safety < 365; safety++) {
           const dStr = toDateString(currentCheck);
           if (checkDateHasStudy(dStr)) {
             streak++;
@@ -353,6 +515,7 @@ export const useGamificationStore = create<GamificationStore>()(
           const d = new Date(today);
           d.setDate(d.getDate() - i);
           const dStr = toDateString(d);
+
           weekDays.push({
             date: dStr,
             dayLabel: dayLabels[d.getDay()],
@@ -380,6 +543,7 @@ export const useGamificationStore = create<GamificationStore>()(
           streakFreezes: typeof p.streakFreezes === 'number' ? p.streakFreezes : currentState.streakFreezes,
           dailyGoalMinutes: typeof p.dailyGoalMinutes === 'number' ? p.dailyGoalMinutes : currentState.dailyGoalMinutes,
           claimedMilestones: Array.isArray(p.claimedMilestones) ? p.claimedMilestones : [],
+          claimedWeeklyChests: Array.isArray(p.claimedWeeklyChests) ? p.claimedWeeklyChests : [],
           unlockedThemes: Array.isArray(p.unlockedThemes) && p.unlockedThemes.length > 0 ? p.unlockedThemes : ['dreamy_pastel'],
           unlockedStamps: Array.isArray(p.unlockedStamps) && p.unlockedStamps.length > 0 ? p.unlockedStamps : ['100% Focus'],
           unlockedChimes: Array.isArray(p.unlockedChimes) && p.unlockedChimes.length > 0 ? p.unlockedChimes : ['default'],

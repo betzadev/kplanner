@@ -119,6 +119,7 @@ export function BottomMemoGrid({
             <textarea
               value={memos[idx]}
               onChange={(e) => onMemoChange(idx, e.target.value)}
+              onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)}
               placeholder="Write note..."
               className="flex-1 w-full text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-600 bg-transparent resize-none focus:outline-none scrollbar-thin"
             />

@@ -20,6 +20,7 @@ import { AnalyticsView } from './components/analytics/AnalyticsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { StreakModal } from './components/gamification/StreakModal';
 import { triggerHaptic } from './utils/haptics';
+import { useBackButton } from './hooks/useBackButton';
 
 import {
   Calendar,
@@ -44,6 +45,15 @@ export default function App() {
   const [streakModalOpen, setStreakModalOpen] = useState(false);
   const [shareCardOpen, setShareCardOpen] = useState(false);
 
+  useBackButton({
+    activeTab,
+    setActiveTab,
+    openModals: [
+      { name: 'streak', isOpen: streakModalOpen, close: () => setStreakModalOpen(false) },
+      { name: 'shareCard', isOpen: shareCardOpen, close: () => setShareCardOpen(false) },
+    ],
+  });
+
   const currentDate = usePlannerStore((state) => state.currentDate);
   const setCurrentDate = usePlannerStore((state) => state.setCurrentDate);
   const loadSheetFromRust = usePlannerStore((state) => state.loadSheetFromRust);
@@ -51,9 +61,12 @@ export default function App() {
   const setBottomMemoLabels = usePlannerStore((state) => state.setBottomMemoLabels);
 
   const initSubjects = useSubjectStore((state) => state.initFromRust);
+  const selectSubject = useSubjectStore((state) => state.selectSubject);
   const initTimer = useTimerStore((state) => state.initFromRust);
+  const setTask = useTimerStore((state) => state.setTask);
   const initTheme = useThemeStore((state) => state.initTheme);
   const initDDay = useDDayStore((state) => state.initFromRust);
+  const initGamification = useGamificationStore((state) => state.initFromRust);
 
   const { calculateStreak, gems, initDailyQuests } = useGamificationStore();
   const { streakCount, hasStudiedToday } = calculateStreak();
@@ -64,6 +77,7 @@ export default function App() {
     initSubjects();
     initTimer();
     initDDay();
+    initGamification();
     initDailyQuests();
     loadSheetFromRust(currentDate);
   }, []);
@@ -197,6 +211,12 @@ export default function App() {
                     onAddTask={addTask}
                     onToggleTask={toggleTask}
                     onDeleteTask={deleteTask}
+                    onStartFocus={(taskId, subjectId) => {
+                      selectSubject(subjectId);
+                      setTask(taskId);
+                      setActiveTab('timer');
+                      triggerHaptic('medium');
+                    }}
                   />
                 </div>
               )}
@@ -236,7 +256,7 @@ export default function App() {
 
       {/* Floating Submenu for Mobile Sheet (Tasks / Grid / Memos / All) */}
       {activeTab === 'planner' && (
-        <div className="fixed bottom-18 left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
+        <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
           <div className="pointer-events-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-[#9FC6FC]/80 dark:border-slate-700 rounded-full p-1.5 shadow-lg flex items-center gap-1.5 transition-all">
             <button
               type="button"

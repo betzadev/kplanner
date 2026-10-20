@@ -142,4 +142,25 @@ export const tauriApi = {
       return false;
     }
   },
+
+  async loadGamificationProfile(): Promise<string | null> {
+    if (!isTauri()) return null;
+    try {
+      return await invoke<string | null>('get_gamification_profile');
+    } catch (e) {
+      console.warn('Tauri invoke get_gamification_profile error:', e);
+      return null;
+    }
+  },
+
+  async saveGamificationProfile(payloadJson: string): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      await invoke('save_gamification_profile', { payloadJson });
+      return true;
+    } catch (e) {
+      console.warn('Tauri invoke save_gamification_profile error:', e);
+      return false;
+    }
+  },
 };

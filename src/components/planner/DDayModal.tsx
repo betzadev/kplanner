@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { HexColor, DEFAULT_PASTEL_PALETTE } from '../../types';
 import { useDDayStore, calculateDDay } from '../../store/useDDayStore';
@@ -17,7 +17,6 @@ export function DDayModal({ isOpen, onClose, currentDate }: DDayModalProps) {
   const [newTargetDate, setNewTargetDate] = useState('');
   const [newColor, setNewColor] = useState<HexColor>(DEFAULT_PASTEL_PALETTE[0]);
 
-  if (!isOpen) return null;
 
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,10 +27,26 @@ export function DDayModal({ isOpen, onClose, currentDate }: DDayModalProps) {
     triggerHaptic('medium');
   };
 
-  if (typeof document === 'undefined') return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+    >
       <div className="bg-white dark:bg-slate-900 border border-[#C2D8FC] dark:border-slate-800 rounded-3xl p-5 w-full max-w-sm shadow-xl space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E4EDFC] dark:border-slate-800 pb-3">

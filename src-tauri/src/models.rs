@@ -89,6 +89,8 @@ pub struct TimerConfig {
     pub ambient_sound: String,
     #[serde(default = "default_volume")]
     pub ambient_volume: f32,
+    #[serde(default)]
+    pub flowtime_overtime_enabled: Option<bool>,
 }
 
 fn default_chime() -> String {
@@ -114,6 +116,7 @@ impl Default for TimerConfig {
             chime_preset: default_chime(),
             ambient_sound: default_ambient(),
             ambient_volume: default_volume(),
+            flowtime_overtime_enabled: Some(false),
         }
     }
 }
@@ -221,6 +224,8 @@ pub struct AppData {
     pub dday_events: Vec<DDayEvent>,
     #[serde(default)]
     pub bottom_memo_preset: Option<String>,
+    #[serde(default)]
+    pub gamification_profile: Option<String>,
 }
 
 impl Default for AppData {
@@ -231,6 +236,7 @@ impl Default for AppData {
             timer_config: TimerConfig::default(),
             dday_events: Vec::new(),
             bottom_memo_preset: Some("classic".to_string()),
+            gamification_profile: None,
         }
     }
 }

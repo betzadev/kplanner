@@ -127,4 +127,195 @@ impl StorageManager {
         *guard = parsed;
         Self::save_to_disk(&self.file_path, &guard)
     }
+
+    pub fn get_gamification_profile(&self) -> Option<String> {
+        let guard = self.data.lock().unwrap();
+        guard.gamification_profile.clone()
+    }
+
+    pub fn save_gamification_profile(&self, payload_json: String) -> Result<(), String> {
+        let mut guard = self.data.lock().unwrap();
+        guard.gamification_profile = Some(payload_json);
+        Self::save_to_disk(&self.file_path, &guard)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::{params, Connection};
+
+    fn init_test_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("failed to open in-memory sqlite");
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS daily_sheets (
+                date TEXT PRIMARY KEY,
+                main_goal TEXT,
+                total_minutes INTEGER,
+                data_json TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );",
+            [],
+        )
+        .expect("create daily_sheets table");
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS dday_events (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                target_date TEXT NOT NULL,
+                color_id TEXT NOT NULL,
+                is_pinned INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );",
+            [],
+        )
+        .expect("create dday_events table");
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS gamification_profile (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                payload_json TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );",
+            [],
+        )
+        .expect("create gamification_profile table");
+
+        conn
+    }
+
+    #[test]
+    fn test_schema_initialization() {
+        let conn = init_test_db();
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+            .unwrap();
+        let tables: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+
+        assert!(tables.contains(&"daily_sheets".to_string()));
+        assert!(tables.contains(&"dday_events".to_string()));
+        assert!(tables.contains(&"gamification_profile".to_string()));
+    }
+
+    #[test]
+    fn test_idempotent_daily_sheet_upsert() {
+        let conn = init_test_db();
+        let date = "2026-10-20";
+
+        let mut sheet = create_empty_daily_sheet(date);
+        sheet.main_goal = "Master Rust & Algorithms".to_string();
+        sheet.total_minutes_studied = 120;
+        sheet.completion_stamp = Some("100% Focus".to_string());
+        sheet.memo_labels = Some([
+            "Concepts".into(),
+            "Questions".into(),
+            "Vocab".into(),
+            "Wins".into(),
+            "Fixes".into(),
+            "Notes".into(),
+        ]);
+
+        if let Some(block) = sheet.time_grid.get_mut("9-0") {
+            block.planned_subject_id = Some("subj_math".to_string());
+            block.actual_subject_id = Some("subj_math".to_string());
+            block.subject_id = Some("subj_math".to_string());
+            block.is_verified_timer = Some(true);
+        }
+
+        let json1 = serde_json::to_string(&sheet).unwrap();
+
+        // 1st insert
+        conn.execute(
+            "INSERT INTO daily_sheets (date, main_goal, total_minutes, data_json, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(date) DO UPDATE SET
+                 main_goal = excluded.main_goal,
+                 total_minutes = excluded.total_minutes,
+                 data_json = excluded.data_json,
+                 updated_at = excluded.updated_at;",
+            params![date, &sheet.main_goal, sheet.total_minutes_studied, &json1, 1000i64],
+        )
+        .unwrap();
+
+        // Update sheet and re-upsert (idempotency check)
+        sheet.main_goal = "Master Rust, Algorithms & Systems".to_string();
+        sheet.total_minutes_studied = 180;
+        let json2 = serde_json::to_string(&sheet).unwrap();
+
+        conn.execute(
+            "INSERT INTO daily_sheets (date, main_goal, total_minutes, data_json, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(date) DO UPDATE SET
+                 main_goal = excluded.main_goal,
+                 total_minutes = excluded.total_minutes,
+                 data_json = excluded.data_json,
+                 updated_at = excluded.updated_at;",
+            params![date, &sheet.main_goal, sheet.total_minutes_studied, &json2, 2000i64],
+        )
+        .unwrap();
+
+        let mut stmt = conn
+            .prepare("SELECT main_goal, total_minutes, data_json FROM daily_sheets WHERE date = ?1;")
+            .unwrap();
+        let (saved_goal, saved_mins, saved_json): (String, u32, String) = stmt
+            .query_row(params![date], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap();
+
+        assert_eq!(saved_goal, "Master Rust, Algorithms & Systems");
+        assert_eq!(saved_mins, 180);
+
+        let parsed: DailySheet = serde_json::from_str(&saved_json).unwrap();
+        assert_eq!(parsed.completion_stamp, Some("100% Focus".to_string()));
+        let block = parsed.time_grid.get("9-0").unwrap();
+        assert_eq!(block.planned_subject_id, Some("subj_math".to_string()));
+        assert_eq!(block.is_verified_timer, Some(true));
+    }
+
+    #[test]
+    fn test_dday_crud_and_gamification_profile() {
+        let conn = init_test_db();
+
+        // D-Day Insert & Read
+        conn.execute(
+            "INSERT INTO dday_events (id, title, target_date, color_id, is_pinned, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6);",
+            params!["dday_exam", "SAT Exam", "2026-11-15", "#F6A6A1", 1, 1000i64],
+        )
+        .unwrap();
+
+        let title: String = conn
+            .query_row("SELECT title FROM dday_events WHERE id = ?1;", params!["dday_exam"], |r| r.get(0))
+            .unwrap();
+        assert_eq!(title, "SAT Exam");
+
+        // D-Day Delete
+        conn.execute("DELETE FROM dday_events WHERE id = ?1;", params!["dday_exam"]).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM dday_events WHERE id = ?1;", params!["dday_exam"], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+
+        // Gamification Profile Upsert & Read
+        let profile_payload = r#"{"xp":350,"gems":180,"streakCount":5,"unlockedThemes":["dreamy_pastel","matcha_cafe"]}"#;
+        conn.execute(
+            "INSERT INTO gamification_profile (id, payload_json, updated_at)
+             VALUES (1, ?1, ?2)
+             ON CONFLICT(id) DO UPDATE SET
+                 payload_json = excluded.payload_json,
+                 updated_at = excluded.updated_at;",
+            params![profile_payload, 5000i64],
+        )
+        .unwrap();
+
+        let read_payload: String = conn
+            .query_row("SELECT payload_json FROM gamification_profile WHERE id = 1;", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(read_payload, profile_payload);
+    }
 }

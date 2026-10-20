@@ -140,3 +140,37 @@ pub async fn sync_turso_database(
         Err("Turso database manager not initialized".to_string())
     }
 }
+
+#[tauri::command]
+pub async fn get_gamification_profile(
+    storage: State<'_, StorageManager>,
+    turso: State<'_, Arc<Mutex<Option<TursoManager>>>>,
+) -> Result<Option<String>, String> {
+    let turso_clone = turso.inner().clone();
+    let guard = turso_clone.lock().await;
+    if let Some(ref manager) = *guard {
+        if let Ok(Some(payload)) = manager.get_gamification_profile().await {
+            return Ok(Some(payload));
+        }
+    }
+    Ok(storage.get_gamification_profile())
+}
+
+#[tauri::command]
+pub async fn save_gamification_profile(
+    storage: State<'_, StorageManager>,
+    turso: State<'_, Arc<Mutex<Option<TursoManager>>>>,
+    payload_json: String,
+) -> Result<(), String> {
+    storage.save_gamification_profile(payload_json.clone())?;
+
+    let turso_clone = turso.inner().clone();
+    tokio::spawn(async move {
+        let guard = turso_clone.lock().await;
+        if let Some(ref manager) = *guard {
+            let _ = manager.upsert_gamification_profile(&payload_json).await;
+        }
+    });
+
+    Ok(())
+}

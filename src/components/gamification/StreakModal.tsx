@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Flame,
@@ -14,6 +14,9 @@ import {
   BellRing,
   ShoppingBag,
   ListTodo,
+  Gift,
+  Medal,
+  Gem,
 } from 'lucide-react';
 import {
   useGamificationStore,
@@ -21,6 +24,8 @@ import {
   AVAILABLE_STAMPS,
   AVAILABLE_CHIMES,
   getLevelInfo,
+  WEEKLY_CHESTS,
+  getCurrentWeekMonday,
 } from '../../store/useGamificationStore';
 import { UNLOCKABLE_THEMES } from '../../types';
 import { triggerHaptic } from '../../utils/haptics';
@@ -33,7 +38,6 @@ interface StreakModalProps {
 export function StreakModal({ isOpen, onClose }: StreakModalProps) {
   const [activeTab, setActiveTab] = useState<'streak' | 'quests' | 'shop'>('streak');
 
-  if (!isOpen) return null;
 
   const xp = useGamificationStore((state) => state.xp) ?? 120;
   const gems = useGamificationStore((state) => state.gems) ?? 120;
@@ -50,6 +54,12 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
   const buyChime = useGamificationStore((state) => state.buyChime);
   const claimMilestone = useGamificationStore((state) => state.claimMilestone);
   const claimQuest = useGamificationStore((state) => state.claimQuest);
+  const claimedWeeklyChests = useGamificationStore((state) => state.claimedWeeklyChests) ?? [];
+  const getWeeklyStudyMinutes = useGamificationStore((state) => state.getWeeklyStudyMinutes);
+  const claimWeeklyChest = useGamificationStore((state) => state.claimWeeklyChest);
+  const currentMonday = getCurrentWeekMonday();
+  const weeklyMins = getWeeklyStudyMinutes ? getWeeklyStudyMinutes() : 0;
+  const weeklyHours = Math.round((weeklyMins / 60) * 10) / 10;
 
   const streakResult = calculateStreak ? calculateStreak() : { streakCount: 0, hasStudiedToday: false, todayMinutes: 0, weekDays: [] };
   const { streakCount = 0, hasStudiedToday = false, todayMinutes = 0, weekDays = [] } = streakResult || {};
@@ -88,11 +98,27 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
     }
   };
 
-  if (typeof document === 'undefined') return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === "undefined") return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 border border-[#C2D8FC]/80 dark:border-slate-800 rounded-3xl p-4 sm:p-5 shadow-2xl max-h-[88vh] overflow-y-auto scrollbar-thin space-y-3.5">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+    >
+      <div data-ui="modal" className="w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 border border-[#C2D8FC]/80 dark:border-slate-800 rounded-3xl p-4 sm:p-5 shadow-2xl max-h-[88vh] overflow-y-auto scrollbar-thin space-y-3.5">
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
@@ -174,7 +200,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-white dark:bg-slate-900 shadow-xs mb-1.5">
                 <Flame size={32} className="text-amber-500 fill-amber-500" />
               </div>
-              <div className="text-2xl sm:text-3xl font-black text-blue-950 dark:text-white font-mono leading-none">
+              <div className="text-2xl sm:text-3xl font-black text-blue-950 dark:text-white tabular-nums leading-none">
                 {streakCount} {streakCount === 1 ? 'Day' : 'Days'}
               </div>
               <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mt-1 leading-tight">
@@ -184,7 +210,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               </p>
 
               {/* 7-Day Flame Track */}
-              <div className="flex items-center justify-between gap-1 mt-3 pt-2.5 border-t border-blue-200/60 dark:border-slate-700/60">
+              <div className="flex items-center justify-between gap-1 mt-3 pt-2.5 ">
                 {weekDays.map((d) => (
                   <div key={d.date} className="flex flex-col items-center gap-1 flex-1 min-w-0">
                     <div
@@ -199,7 +225,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                       {d.studied ? (
                         <Flame size={13} className="fill-white" />
                       ) : d.isToday ? (
-                        <span className="font-mono text-[8px]">Now</span>
+                        <span className="tabular-nums text-[8px]">Now</span>
                       ) : (
                         <span className="text-slate-400 text-[10px]">•</span>
                       )}
@@ -221,7 +247,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                     Level {levelInfo.level}: {levelInfo.title}
                   </span>
                 </div>
-                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                <span className="text-[10px] tabular-nums text-slate-500 dark:text-slate-400">
                   {levelInfo.currentLevelXp} / {levelInfo.xpNeeded} XP
                 </span>
               </div>
@@ -231,6 +257,111 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                   className="h-full bg-[#9FC6FC] dark:bg-blue-400 rounded-full transition-colors duration-300"
                   style={{ width: `${Math.min(100, levelInfo.progressPercent)}%` }}
                 />
+              </div>
+            </div>
+
+            {/* Weekly Milestone Study Chests (Phase 4.2) */}
+            <div className="bg-[#F0F5FD] dark:bg-slate-800/80 border border-[#C2D8FC] dark:border-slate-700 rounded-2xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Gift size={15} className="text-blue-700 dark:text-[#9FC6FC]" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                    Weekly Study Chests
+                  </span>
+                </div>
+                <span className="text-[9px] font-semibold text-slate-600 dark:text-slate-400 bg-white/90 dark:bg-slate-900 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                  Resets Mon • {weeklyHours}h / 35h
+                </span>
+              </div>
+
+              {/* Overall Progress Bar */}
+              <div className="space-y-1">
+                <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-blue-600 dark:bg-[#9FC6FC] rounded-full transition-[width] duration-300"
+                    style={{ width: `${Math.min(100, (weeklyMins / 2100) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] text-slate-500 dark:text-slate-400 px-0.5">
+                  <span>0h</span>
+                  <span>10h (Bronze)</span>
+                  <span>20h (Silver)</span>
+                  <span>35h (Gold)</span>
+                </div>
+              </div>
+
+              {/* 3 Chests Row */}
+              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                {WEEKLY_CHESTS.map((chest) => {
+                  const weekKey = `${chest.id}_${currentMonday}`;
+                  const isClaimed = claimedWeeklyChests.includes(weekKey);
+                  const isUnlocked = weeklyMins >= chest.minutesRequired;
+                  const isGold = chest.id === "gold";
+
+                  return (
+                    <div
+                      key={chest.id}
+                      className={`flex flex-col items-center text-center p-2 rounded-xl border transition-colors ${
+                        isClaimed
+                          ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300"
+                          : isUnlocked
+                          ? "bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-600 shadow-xs"
+                          : "bg-white/70 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 opacity-80"
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-1">
+                        {chest.id === "bronze" ? (
+                          <Medal size={17} className="text-amber-700" />
+                        ) : chest.id === "silver" ? (
+                          <Medal size={17} className="text-slate-400" />
+                        ) : (
+                          <Crown size={17} className="text-amber-500" />
+                        )}
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                        {chest.title}
+                      </div>
+                      <div className="text-[9px] text-slate-500 dark:text-slate-400">
+                        {chest.hoursRequired}h
+                      </div>
+                      <div className="flex flex-col items-center justify-center text-[8px] sm:text-[9px] text-blue-700 dark:text-[#9FC6FC] font-bold mt-1 leading-tight">
+                        <span className="flex items-center gap-0.5">
+                          +{chest.gemReward} <Gem size={9} className="text-cyan-500" />
+                        </span>
+                        <span>+{chest.xpReward} XP</span>
+                      </div>
+                      {isGold && (
+                        <div className="text-[8px] text-amber-600 dark:text-amber-400 font-bold truncate max-w-full mt-0.5">
+                          Crown Stamp
+                        </div>
+                      )}
+
+                      <div className="mt-1.5 w-full">
+                        {isClaimed ? (
+                          <span className="flex items-center justify-center gap-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+                            <Check size={10} /> Claimed
+                          </span>
+                        ) : isUnlocked ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (claimWeeklyChest(chest.id)) {
+                                triggerHaptic("success");
+                              }
+                            }}
+                            className="w-full py-1 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-bold rounded-lg shadow-xs cursor-pointer active:scale-95 transition-transform"
+                          >
+                            Claim
+                          </button>
+                        ) : (
+                          <span className="text-[8px] text-slate-400 block text-center">
+                            {Math.max(0, Math.round((chest.minutesRequired - weeklyMins) / 60 * 10) / 10)}h left
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -277,7 +408,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                             Claim +{m.gemReward} Gems
                           </button>
                         ) : (
-                          <span className="text-[10px] text-slate-400 font-mono">
+                          <span className="text-[10px] text-slate-400 tabular-nums">
                             {m.daysRequired}d goal
                           </span>
                         )}
@@ -319,14 +450,14 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                         {quest.description}
                       </p>
                     </div>
-                    <span className="text-[10px] font-mono font-bold text-blue-700 dark:text-[#9FC6FC]">
+                    <span className="text-[10px] tabular-nums font-bold text-blue-700 dark:text-[#9FC6FC]">
                       +{quest.xpReward} XP / +{quest.gemReward} Gems
                     </span>
                   </div>
 
                   {/* Progress bar */}
                   <div className="space-y-1">
-                    <div className="flex justify-between text-[9px] font-mono text-slate-400">
+                    <div className="flex justify-between text-[9px] tabular-nums text-slate-400">
                       <span>Progress</span>
                       <span>
                         {quest.progress} / {quest.goal} {quest.unit}
@@ -334,7 +465,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-600 dark:bg-[#9FC6FC] rounded-full transition-all duration-300"
+                        className="h-full bg-blue-600 dark:bg-[#9FC6FC] rounded-full transition-[width] duration-300"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -370,8 +501,8 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
                 Available Gems
               </span>
-              <span className="text-base font-black font-mono text-cyan-600 dark:text-cyan-400">
-                💎 {gems}
+              <span className="text-base font-black tabular-nums text-cyan-600 dark:text-cyan-400">
+                <Gem size={15} className="inline text-cyan-500 mr-1" />{gems}
               </span>
             </div>
 
@@ -401,14 +532,14 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                     : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                Buy (80 💎)
+                Buy (80 Gems)
               </button>
             </div>
 
             {/* Unlockable Subject Color Themes */}
             <div className="space-y-1.5">
               <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Palette size={13} className="text-indigo-500" />
+                <Palette size={13} className="text-blue-600" />
                 <span>Subject Color Themes</span>
               </div>
 
@@ -452,7 +583,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                             : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                         }`}
                       >
-                        {theme.priceGems} 💎
+                        {theme.priceGems} Gems
                       </button>
                     )}
                   </div>
@@ -499,7 +630,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                             : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                         }`}
                       >
-                        {stamp.priceGems} 💎
+                        {stamp.priceGems} Gems
                       </button>
                     )}
                   </div>
@@ -546,7 +677,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                             : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                         }`}
                       >
-                        {chime.priceGems} 💎
+                        {chime.priceGems} Gems
                       </button>
                     )}
                   </div>

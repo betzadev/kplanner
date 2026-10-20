@@ -98,6 +98,7 @@ export interface TimerConfig {
   chimePreset?: string;
   ambientSound?: string;
   ambientVolume?: number;
+  flowtimeOvertimeEnabled?: boolean;
 }
 
 export const DEFAULT_PASTEL_PALETTE: readonly HexColor[] = [

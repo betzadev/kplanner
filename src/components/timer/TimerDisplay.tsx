@@ -14,6 +14,7 @@ interface TimerDisplayProps {
   subjectColor?: string;
   onSkipPhase?: () => void;
   onPreviousPhase?: () => void;
+  isOvertime?: boolean;
 }
 
 export function TimerDisplay({
@@ -29,6 +30,7 @@ export function TimerDisplay({
   subjectColor = '#C2D8FC',
   onSkipPhase,
   onPreviousPhase,
+  isOvertime = false,
 }: TimerDisplayProps) {
   const isPomodoro = mode === 'pomodoro';
   const showHours = Number(hours) > 0;
@@ -63,13 +65,18 @@ export function TimerDisplay({
               </button>
             )}
 
+            {isOvertime ? (
+              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-300 dark:border-amber-700 animate-pulse">
+                <span>⚡ Flowtime Overtime</span>
+              </span>
+            ) : (
             <span
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
                 pomodoroPhase === 'focus'
                   ? 'bg-[#E4EDFC] text-blue-900 dark:bg-blue-950/80 dark:text-blue-200 border border-[#C2D8FC] dark:border-blue-800'
                   : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800'
               }`}
-            >
+            >)
               {pomodoroPhase === 'focus' ? (
                 <>
                   <Flame size={13} className="text-blue-600 dark:text-blue-400" />
@@ -86,7 +93,7 @@ export function TimerDisplay({
                   <span>Long Break</span>
                 </>
               )}
-            </span>
+            </span>)}
 
             {/* Next Phase Button */}
             {onSkipPhase && (
@@ -125,7 +132,12 @@ export function TimerDisplay({
 
       {/* Main Clock Face with Circular / Linear Progress */}
       <div className="relative flex flex-col items-center w-full">
-        <div className="flex items-center justify-center text-4xl sm:text-5xl md:text-6xl font-extrabold text-slate-900 dark:text-slate-50 font-mono tracking-tight bg-white dark:bg-slate-800/90 px-6 py-3 sm:px-7 sm:py-4 rounded-3xl border border-[#C2D8FC]/80 dark:border-slate-700 shadow-sm w-full max-w-[280px] sm:max-w-[320px]">
+        <div className={`flex items-center justify-center text-4xl sm:text-5xl md:text-6xl font-extrabold font-mono tracking-tight bg-white dark:bg-slate-800/90 px-6 py-3 sm:px-7 sm:py-4 rounded-3xl border shadow-sm w-full max-w-[280px] sm:max-w-[320px] transition-colors ${
+          isOvertime
+            ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700'
+            : 'text-slate-900 dark:text-slate-50 border-[#C2D8FC]/80 dark:border-slate-700'
+        }`}>
+          {isOvertime && <span className="text-amber-500 mr-0.5">+</span>}
           {showHours && (
             <>
               <span>{hours}</span>

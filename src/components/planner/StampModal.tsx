@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AVAILABLE_STAMPS, useGamificationStore } from '../../store/useGamificationStore';
 import { triggerHaptic } from '../../utils/haptics';
@@ -20,8 +21,16 @@ export function StampModal({
   const unlockedStamps = useGamificationStore((state) => state.unlockedStamps) ?? ['100% Focus'];
   const buyStamp = useGamificationStore((state) => state.buyStamp);
 
-  if (!isOpen) return null;
-  if (typeof document === 'undefined') return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === "undefined") return null;
 
   const handleApply = (stampId: string) => {
     onSelectStamp(stampId);
@@ -46,7 +55,14 @@ export function StampModal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+    >
       <div className="bg-white dark:bg-slate-900 border border-[#C2D8FC] dark:border-slate-800 rounded-3xl p-5 w-full max-w-sm shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E4EDFC] dark:border-slate-800 pb-3">

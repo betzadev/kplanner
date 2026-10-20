@@ -60,6 +60,8 @@ pub fn run() {
             export_data,
             import_data,
             sync_turso_database,
+            get_gamification_profile,
+            save_gamification_profile,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

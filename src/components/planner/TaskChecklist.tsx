@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, CheckCircle2, History, Layers } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, History, Layers, Play, Sparkles } from 'lucide-react';
+import { usePlannerStore } from '../../store/usePlannerStore';
+import { parseDateString, toDateString } from '../../utils/timeSlotMapper';
 import { DateString, EntityId, PlannerTask } from '../../types';
 import { CheckBox } from '../ui/CheckBox';
 import { ColorCircle } from '../ui/ColorCircle';
 import { useSubjectStore } from '../../store/useSubjectStore';
 import { triggerHaptic } from '../../utils/haptics';
 import { AutoSplitModal } from './AutoSplitModal';
+import { useBackButton } from '../../hooks/useBackButton';
 
 interface TaskChecklistProps {
   date: DateString;
@@ -13,6 +16,7 @@ interface TaskChecklistProps {
   onAddTask: (title: string, subjectId: EntityId) => void;
   onToggleTask: (taskId: EntityId) => void;
   onDeleteTask: (taskId: EntityId) => void;
+  onStartFocus?: (taskId: EntityId, subjectId: EntityId) => void;
 }
 
 export function TaskChecklist({
@@ -21,9 +25,31 @@ export function TaskChecklist({
   onAddTask,
   onToggleTask,
   onDeleteTask,
+  onStartFocus,
 }: TaskChecklistProps) {
   const [newTitle, setNewTitle] = useState('');
   const [autoSplitOpen, setAutoSplitOpen] = useState(false);
+  const [isSpacedReview, setIsSpacedReview] = useState(false);
+  const currentSheet = usePlannerStore((state) => state.dailySheets[date]);
+  const taskMinutesMap = React.useMemo(() => {
+    const map = new Map<EntityId, number>();
+    if (currentSheet?.timeGrid) {
+      Object.values(currentSheet.timeGrid).forEach((cell) => {
+        if (cell.taskId && cell.subjectId) {
+          const mins = Math.round(10 * (cell.fillRatio ?? 1.0));
+          map.set(cell.taskId, (map.get(cell.taskId) || 0) + mins);
+        }
+      });
+    }
+    return map;
+  }, [currentSheet]);
+  useBackButton({
+    activeTab: 'planner',
+    setActiveTab: () => {},
+    openModals: [
+      { name: 'autoSplit', isOpen: autoSplitOpen, close: () => setAutoSplitOpen(false) },
+    ],
+  });
   const subjects = useSubjectStore((state) => state.subjects);
   const selectedSubjectId = useSubjectStore((state) => state.selectedSubjectId) ?? subjects[0]?.id;
   const [taskSubjectId, setTaskSubjectId] = useState<EntityId | null>(null);
@@ -34,7 +60,28 @@ export function TaskChecklist({
   const handleAdd = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newTitle.trim() || !activeSubjectId) return;
+
     onAddTask(newTitle, activeSubjectId);
+
+    // Phase 3.2: Ebbinghaus Spaced Repetition Scheduler (1-3-7-14 Days)
+    if (isSpacedReview) {
+      const baseDate = parseDateString(date);
+      const intervals = [
+        { days: 1, label: '[Review D+1]' },
+        { days: 3, label: '[Review D+3]' },
+        { days: 7, label: '[Review D+7]' },
+        { days: 14, label: '[Review D+14]' },
+      ];
+
+      intervals.forEach(({ days, label }) => {
+        const revDate = new Date(baseDate);
+        revDate.setDate(revDate.getDate() + days);
+        const revDateStr = toDateString(revDate);
+        usePlannerStore.getState().addTask(revDateStr, `${label} ${newTitle}`, activeSubjectId);
+      });
+      setIsSpacedReview(false);
+    }
+
     setNewTitle('');
     triggerHaptic('medium');
   };
@@ -136,7 +183,22 @@ export function TaskChecklist({
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {taskMinutesMap.has(task.id) && (
+                    <span className="text-[10px] font-bold font-mono text-blue-700 dark:text-[#9FC6FC] bg-blue-100 dark:bg-blue-950/80 px-2 py-0.5 rounded-full">
+                      {taskMinutesMap.get(task.id)}m logged
+                    </span>
+                  )}
+                  {!task.isCompleted && onStartFocus && (
+                    <button
+                      type="button"
+                      onClick={() => onStartFocus(task.id, task.subjectId)}
+                      className="p-1 text-blue-600 hover:text-blue-700 dark:text-[#9FC6FC] hover:bg-[#E4EDFC] dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                      title="Focus Timer: Bind this task"
+                    >
+                      <Play size={13} className="fill-blue-600 dark:fill-[#9FC6FC]" />
+                    </button>
+                  )}
                   <CheckBox checked={task.isCompleted} onToggle={() => handleToggle(task.id)} size={22} />
                   <button
                     type="button"
@@ -171,6 +233,7 @@ export function TaskChecklist({
           type="text"
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
+          onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 250)}
           placeholder="+ Add task..."
           className="flex-1 min-w-0 text-xs sm:text-sm px-3 py-2.5 text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#9FC6FC] dark:focus:ring-blue-400 placeholder-slate-400 dark:placeholder-slate-500 shadow-2xs"
         />
@@ -184,6 +247,26 @@ export function TaskChecklist({
           <Plus size={18} />
         </button>
       </form>
+
+      {/* Phase 3.2 Spaced Repetition Toggle */}
+      <div className="flex items-center justify-between pt-1 px-1">
+        <button
+          type="button"
+          onClick={() => {
+            setIsSpacedReview(!isSpacedReview);
+            triggerHaptic('light');
+          }}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-bold border transition-all cursor-pointer ${
+            isSpacedReview
+              ? 'bg-purple-100 text-purple-900 dark:bg-purple-950/80 dark:text-purple-200 border-purple-300 dark:border-purple-700 shadow-2xs ring-1 ring-purple-400/40'
+              : 'bg-white/80 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+          }`}
+          title="Schedule Ebbinghaus Spaced Reviews on D+1, D+3, D+7, and D+14"
+        >
+          <Sparkles size={11} className={isSpacedReview ? 'text-purple-600 dark:text-purple-300' : ''} />
+          <span>{isSpacedReview ? 'Spaced Review (1-3-7-14d): ON' : 'Schedule Spaced Review (1-3-7-14d)'}</span>
+        </button>
+      </div>
 
       {/* Auto Split Workload Modal */}
       <AutoSplitModal
