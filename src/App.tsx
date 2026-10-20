@@ -6,6 +6,7 @@ import { useSubjectStore } from './store/useSubjectStore';
 import { useTimerStore } from './store/useTimerStore';
 import { useThemeStore } from './store/useThemeStore';
 import { useGamificationStore } from './store/useGamificationStore';
+import { useDDayStore } from './store/useDDayStore';
 import { useDailySheet } from './hooks/useDailySheet';
 
 import { PlannerHeader } from './components/planner/PlannerHeader';
@@ -13,13 +14,26 @@ import { SubjectLegend } from './components/planner/SubjectLegend';
 import { TaskChecklist } from './components/planner/TaskChecklist';
 import { TenMinGrid } from './components/planner/TenMinGrid';
 import { BottomMemoGrid } from './components/planner/BottomMemoGrid';
+import { ShareCardModal } from './components/planner/ShareCardModal';
 import { TimerView } from './components/timer/TimerView';
 import { AnalyticsView } from './components/analytics/AnalyticsView';
 import { SettingsView } from './components/settings/SettingsView';
 import { StreakModal } from './components/gamification/StreakModal';
 import { triggerHaptic } from './utils/haptics';
 
-import { Calendar, Clock, BarChart3, Settings, Grid3X3, CheckSquare, Layers, Flame, Gem, FileText } from 'lucide-react';
+import {
+  Calendar,
+  Clock,
+  BarChart3,
+  Settings,
+  Grid3X3,
+  CheckSquare,
+  Layers,
+  Flame,
+  Gem,
+  FileText,
+  Share2,
+} from 'lucide-react';
 import { TbPlant2 } from 'react-icons/tb';
 
 type SheetSubView = 'tasks' | 'grid' | 'memos' | 'all';
@@ -28,22 +42,29 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('planner');
   const [sheetSubView, setSheetSubView] = useState<SheetSubView>('tasks');
   const [streakModalOpen, setStreakModalOpen] = useState(false);
+  const [shareCardOpen, setShareCardOpen] = useState(false);
 
   const currentDate = usePlannerStore((state) => state.currentDate);
   const setCurrentDate = usePlannerStore((state) => state.setCurrentDate);
   const loadSheetFromRust = usePlannerStore((state) => state.loadSheetFromRust);
+  const dailySheets = usePlannerStore((state) => state.dailySheets);
+  const setBottomMemoLabels = usePlannerStore((state) => state.setBottomMemoLabels);
+
   const initSubjects = useSubjectStore((state) => state.initFromRust);
   const initTimer = useTimerStore((state) => state.initFromRust);
   const initTheme = useThemeStore((state) => state.initTheme);
+  const initDDay = useDDayStore((state) => state.initFromRust);
 
-  const { calculateStreak, gems } = useGamificationStore();
+  const { calculateStreak, gems, initDailyQuests } = useGamificationStore();
   const { streakCount, hasStudiedToday } = calculateStreak();
 
-  // Initialize data and theme from Rust backend / system
+  // Initialize data and stores from Rust backend / system
   useEffect(() => {
     initTheme();
     initSubjects();
     initTimer();
+    initDDay();
+    initDailyQuests();
     loadSheetFromRust(currentDate);
   }, []);
 
@@ -58,6 +79,17 @@ export default function App() {
     toggleTask,
     deleteTask,
   } = useDailySheet(currentDate);
+
+  const currentSheet = dailySheets[currentDate] || {
+    date: currentDate,
+    mainGoal,
+    totalMinutesStudied: totalMinutes,
+    tasks,
+    timeGrid: {},
+    bottomMemos,
+    memoLabels: undefined,
+    completionStamp: null,
+  };
 
   const handleTabSwitch = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -84,8 +116,22 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Header: Streak & Gems */}
-          <div className="flex items-center gap-2">
+          {/* Right Header: Share Card, Streak & Gems */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Shareable Studygram Card Exporter Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShareCardOpen(true);
+                triggerHaptic('light');
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer shadow-2xs text-blue-700 dark:text-[#9FC6FC]"
+              title="Export 9:16 Studygram Story Card"
+            >
+              <Share2 size={13} />
+              <span className="text-xs font-bold hidden sm:inline">Share</span>
+            </button>
+
             {/* Duolingo Streak Pill */}
             <button
               type="button"
@@ -124,11 +170,11 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content Area: Spacious & Screen-Optimized */}
+      {/* Main Content Area */}
       <main className="flex-1 max-w-md md:max-w-4xl w-full mx-auto p-3 sm:p-4 smooth-scroll">
         {activeTab === 'planner' && (
-          <div className="space-y-3.5">
-            {/* Header: Date, Goal, Total Time */}
+          <div className="space-y-3.5 relative">
+            {/* Header: Date, Goal, D-Days, Total Time */}
             <PlannerHeader
               date={currentDate}
               mainGoal={mainGoal}
@@ -140,7 +186,7 @@ export default function App() {
             {/* Subject Palette Selection */}
             <SubjectLegend onEditSubject={() => setActiveTab('settings')} />
 
-            {/* View Switching on Mobile: No long scroll needed */}
+            {/* View Switching on Mobile */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
               {/* Checklist Sub-view */}
               {(sheetSubView === 'tasks' || sheetSubView === 'all') && (
@@ -169,7 +215,12 @@ export default function App() {
               {/* Bottom 6-Box Memo Grid Sub-view */}
               {(sheetSubView === 'memos' || sheetSubView === 'all') && (
                 <div className="col-span-12">
-                  <BottomMemoGrid memos={bottomMemos} onMemoChange={updateBottomMemo} />
+                  <BottomMemoGrid
+                    memos={bottomMemos}
+                    customLabels={currentSheet.memoLabels}
+                    onMemoChange={updateBottomMemo}
+                    onLabelsChange={(labels) => setBottomMemoLabels(currentDate, labels)}
+                  />
                 </div>
               )}
             </div>
@@ -200,7 +251,7 @@ export default function App() {
               }`}
             >
               <CheckSquare size={14} />
-              <span>Tasks ({tasks.filter(t => !t.isCompleted).length})</span>
+              <span>Tasks ({tasks.filter((t) => !t.isCompleted).length})</span>
             </button>
 
             <button
@@ -254,7 +305,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Fixed Mobile & Desktop Bottom Navigation Bar (Dreamy pill styling) */}
+      {/* Fixed Mobile & Desktop Bottom Navigation Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-t border-[#C2D8FC]/60 dark:border-slate-800 pb-[env(safe-area-inset-bottom,0px)] shadow-lg transition-colors">
         <div className="max-w-md md:max-w-xl mx-auto flex items-center justify-around h-16 px-2">
           <button
@@ -335,8 +386,14 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Duolingo Rewards & Streak Modal */}
-      {streakModalOpen && <StreakModal isOpen={streakModalOpen} onClose={() => setStreakModalOpen(false)} />}
+      {/* Modals */}
+      <StreakModal isOpen={streakModalOpen} onClose={() => setStreakModalOpen(false)} />
+      <ShareCardModal
+        isOpen={shareCardOpen}
+        onClose={() => setShareCardOpen(false)}
+        date={currentDate}
+        sheet={currentSheet}
+      />
     </div>
   );
 }

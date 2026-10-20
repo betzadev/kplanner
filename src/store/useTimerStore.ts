@@ -11,6 +11,7 @@ import { tauriApi } from '../services/tauriApi';
 import { usePlannerStore } from './usePlannerStore';
 import { useGamificationStore } from './useGamificationStore';
 import { dateToBlockIndex, toDateString, buildGridCellKey } from '../utils/timeSlotMapper';
+import { ambientAudio, ChimePresetType } from '../utils/ambientAudio';
 
 export interface TimerStoreState {
   timerState: TimerState;
@@ -45,6 +46,9 @@ const DEFAULT_TIMER_CONFIG: TimerConfig = {
   autoStartBreaks: true,
   autoStartPomodoros: false,
   soundAlertsEnabled: true,
+  chimePreset: 'default',
+  ambientSound: 'none',
+  ambientVolume: 0.5,
 };
 
 const INITIAL_TIMER_STATE: TimerState = {
@@ -59,29 +63,6 @@ const INITIAL_TIMER_STATE: TimerState = {
   completedPomodorosInCycle: 0,
 };
 
-function playChime() {
-  try {
-    const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
-
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
-  } catch {
-    // Audio context not allowed or blocked
-  }
-}
-
 export const useTimerStore = create<TimerStore>((set, get) => ({
   timerState: INITIAL_TIMER_STATE,
   timerConfig: DEFAULT_TIMER_CONFIG,
@@ -89,7 +70,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
   initFromRust: async () => {
     const rustConfig = await tauriApi.loadTimerConfig();
     if (rustConfig) {
-      set({ timerConfig: rustConfig });
+      set({ timerConfig: { ...DEFAULT_TIMER_CONFIG, ...rustConfig } });
     }
   },
 
@@ -122,6 +103,8 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
         currentTaskId: taskId,
       },
     }));
+
+    get().syncCurrentTimeToGrid();
   },
 
   pauseTimer: () => {
@@ -130,8 +113,8 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
 
     if (timerState.status !== 'running') return;
 
-    const sessionElapsed = timerState.startTimestamp ? now - timerState.startTimestamp : 0;
-    const newAccumulated = timerState.accumulatedMs + sessionElapsed;
+    const currentRun = timerState.startTimestamp ? now - timerState.startTimestamp : 0;
+    const newAccumulated = timerState.accumulatedMs + currentRun;
 
     set({
       timerState: {
@@ -202,8 +185,14 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
 
     if (timerState.pomodoroPhase === 'focus') {
       completedCycles += 1;
-      useGamificationStore.getState().awardXp(25);
-      useGamificationStore.getState().awardGems(5);
+      // Phase 4.4: 1.5x XP and Gem bonus for verified study timer sessions
+      const verifiedXP = Math.round(25 * 1.5); // 38 XP
+      const verifiedGems = Math.round(5 * 1.5); // 8 Gems
+      useGamificationStore.getState().awardXp(verifiedXP);
+      useGamificationStore.getState().awardGems(verifiedGems);
+
+      // Check daily quest progress
+      useGamificationStore.getState().advanceQuest('quest_pomodoro', 1);
 
       if (completedCycles % timerConfig.longBreakInterval === 0) {
         nextPhase = 'longBreak';
@@ -215,11 +204,13 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
     }
 
     if (timerConfig.soundAlertsEnabled) {
-      playChime();
+      ambientAudio.playChime((timerConfig.chimePreset as ChimePresetType) || 'default');
     }
 
     const autoStart =
-      nextPhase === 'focus' ? timerConfig.autoStartPomodoros : timerConfig.autoStartBreaks;
+      (nextPhase === 'focus' && timerConfig.autoStartPomodoros) ||
+      (nextPhase !== 'focus' && timerConfig.autoStartBreaks);
+
     const now = Date.now() as UnixTimestampMs;
 
     set({
@@ -236,7 +227,25 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
   },
 
   skipPomodoroPhase: () => {
-    get().transitionPomodoroPhase();
+    const { timerState } = get();
+    let nextPhase: PomodoroPhase = 'focus';
+
+    if (timerState.pomodoroPhase === 'focus') {
+      nextPhase = 'shortBreak';
+    } else {
+      nextPhase = 'focus';
+    }
+
+    set({
+      timerState: {
+        ...timerState,
+        status: 'idle',
+        pomodoroPhase: nextPhase,
+        startTimestamp: null,
+        pausedTimestamp: null,
+        accumulatedMs: 0,
+      },
+    });
   },
 
   previousPomodoroPhase: () => {
@@ -316,15 +325,22 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
     const key = buildGridCellKey(coord.hour, coord.tenMinIndex);
     const existingBlock = currentSheet?.timeGrid[key];
 
-    if (!existingBlock || existingBlock.subjectId !== timerState.currentSubjectId) {
+    if (!existingBlock || existingBlock.subjectId !== timerState.currentSubjectId || !existingBlock.isVerifiedTimer) {
       plannerStore.paintCell(
         todayStr,
         coord.hour,
         coord.tenMinIndex,
         timerState.currentSubjectId,
         timerState.currentTaskId,
-        1.0
+        1.0,
+        false, // not plan mode
+        true   // isVerifiedTimer: true
       );
+
+      // Check Early Bird quest (before 9:00 AM)
+      if (now.getHours() < 9) {
+        useGamificationStore.getState().advanceQuest('quest_early_bird', 10);
+      }
     }
   },
 }));

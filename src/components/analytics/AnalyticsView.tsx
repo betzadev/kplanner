@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Award,
+  Target,
 } from 'lucide-react';
 import { StreakModal } from '../gamification/StreakModal';
 
@@ -28,11 +29,13 @@ export function AnalyticsView() {
   const currentDate = usePlannerStore((state) => state.currentDate);
   const setCurrentDate = usePlannerStore((state) => state.setCurrentDate);
   const dailySheets = usePlannerStore((state) => state.dailySheets);
+  const getPlanFulfillmentRate = usePlannerStore((state) => state.getPlanFulfillmentRate);
   const subjects = useSubjectStore((state) => state.subjects);
   const { calculateStreak, gems, xp } = useGamificationStore();
 
   const { streakCount, hasStudiedToday, todayMinutes } = calculateStreak();
   const levelInfo = getLevelInfo(xp);
+  const fulfillment = getPlanFulfillmentRate(currentDate);
 
   const currentSheet = dailySheets[currentDate];
   const parsedDate = parseDateString(currentDate);
@@ -114,38 +117,31 @@ export function AnalyticsView() {
         date: dStr,
         dayLabel: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()],
         dateNum: d.getDate(),
-        isCurrent: dStr === currentDate,
         minutes: dayMins,
+        isCurrent: dStr === currentDate,
       });
     }
     return days;
   }, [dailySheets, currentDate]);
 
-  const weeklyTotal = useMemo(() => weeklyData.reduce((acc, c) => acc + c.minutes, 0), [weeklyData]);
+  const weeklyTotal = useMemo(() => weeklyData.reduce((acc, d) => acc + d.minutes, 0), [weeklyData]);
   const weeklyAvg = Math.round(weeklyTotal / 7);
   const maxWeeklyMinutes = Math.max(60, ...weeklyData.map((d) => d.minutes));
 
-  // Annual Overview (12 Months)
+  // Annual Overview (12 Months of current year)
   const currentYear = parsedDate.getFullYear();
   const annualMonths = useMemo(() => {
-    const months = [
-      { month: 0, label: 'Jan', minutes: 0, daysStudied: 0 },
-      { month: 1, label: 'Feb', minutes: 0, daysStudied: 0 },
-      { month: 2, label: 'Mar', minutes: 0, daysStudied: 0 },
-      { month: 3, label: 'Apr', minutes: 0, daysStudied: 0 },
-      { month: 4, label: 'May', minutes: 0, daysStudied: 0 },
-      { month: 5, label: 'Jun', minutes: 0, daysStudied: 0 },
-      { month: 6, label: 'Jul', minutes: 0, daysStudied: 0 },
-      { month: 7, label: 'Aug', minutes: 0, daysStudied: 0 },
-      { month: 8, label: 'Sep', minutes: 0, daysStudied: 0 },
-      { month: 9, label: 'Oct', minutes: 0, daysStudied: 0 },
-      { month: 10, label: 'Nov', minutes: 0, daysStudied: 0 },
-      { month: 11, label: 'Dec', minutes: 0, daysStudied: 0 },
-    ];
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
+      minutes: 0,
+      daysStudied: 0,
+    }));
 
-    Object.entries(dailySheets).forEach(([dateKey, sheet]) => {
-      const [y, m] = dateKey.split('-').map(Number);
-      if (y === currentYear && m >= 1 && m <= 12) {
+    Object.entries(dailySheets).forEach(([dateStr, sheet]) => {
+      if (dateStr.startsWith(String(currentYear))) {
+        const parts = dateStr.split('-');
+        const m = parseInt(parts[1], 10);
         let mins = sheet.totalMinutesStudied ?? 0;
         if (mins === 0 && sheet.timeGrid) {
           Object.values(sheet.timeGrid).forEach((cell) => {
@@ -221,7 +217,7 @@ export function AnalyticsView() {
         </div>
       </div>
 
-      {/* Analytics Period Switcher (Daily / Weekly / Annual) */}
+      {/* Analytics Period Switcher */}
       <div className="bg-white/85 dark:bg-slate-900 border border-[#C2D8FC]/60 dark:border-slate-800 rounded-3xl p-3 sm:p-4 flex flex-col sm:flex-row items-center justify-between gap-2.5 shadow-sm transition-colors w-full">
         <div className="flex items-center gap-2.5 w-full sm:w-auto">
           <div className="p-2 bg-[#E4EDFC] dark:bg-slate-800 rounded-2xl text-blue-700 dark:text-[#9FC6FC]">
@@ -279,9 +275,8 @@ export function AnalyticsView() {
             </button>
           </div>
 
-          {/* Quick Date Navigator for Daily Mode */}
           {period === 'daily' && (
-            <div className="flex items-center gap-1 bg-[#E4EDFC]/60 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-2xl p-0.5">
+            <div className="flex items-center gap-1 bg-[#E4EDFC]/60 dark:bg-slate-800 p-0.5 rounded-2xl border border-[#C2D8FC] dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => {
@@ -315,8 +310,8 @@ export function AnalyticsView() {
         </div>
       </div>
 
-      {/* KPI Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      {/* KPI Stats Cards (Includes Plan Fulfillment Rate) */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         <div className="bg-white/85 dark:bg-slate-900 border border-[#C2D8FC]/60 dark:border-slate-800 rounded-3xl p-3 sm:p-3.5 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
             <span className="text-[10px] font-bold">
@@ -337,6 +332,22 @@ export function AnalyticsView() {
               : period === 'weekly'
               ? `Avg ${weeklyAvg}m/day`
               : `${annualDaysStudied} active days`}
+          </span>
+        </div>
+
+        {/* Phase 3.1: Plan Fulfillment Rate (%) Card */}
+        <div className="bg-white/85 dark:bg-slate-900 border border-[#C2D8FC]/60 dark:border-slate-800 rounded-3xl p-3 sm:p-3.5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-400 dark:text-slate-500 mb-1">
+            <span className="text-[10px] font-bold">Plan Fulfillment</span>
+            <Target size={14} className="text-indigo-500" />
+          </div>
+          <div className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 font-mono">
+            {fulfillment.plannedMinutes > 0 ? `${fulfillment.ratePercent}%` : 'N/A'}
+          </div>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate block">
+            {fulfillment.plannedMinutes > 0
+              ? `${fulfillment.matchedMinutes}m of ${fulfillment.plannedMinutes}m`
+              : 'No plan set'}
           </span>
         </div>
 

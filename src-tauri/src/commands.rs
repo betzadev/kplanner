@@ -1,4 +1,4 @@
-use crate::models::{DailySheet, SubjectItem, TimerConfig};
+use crate::models::{DDayEvent, DailySheet, SubjectItem, TimerConfig};
 use crate::storage::StorageManager;
 use crate::turso::TursoManager;
 use std::sync::Arc;
@@ -11,11 +11,30 @@ pub fn load_daily_sheet(storage: State<'_, StorageManager>, date: String) -> Dai
 }
 
 #[tauri::command]
-pub fn save_daily_sheet(
+pub async fn save_daily_sheet(
     storage: State<'_, StorageManager>,
+    turso: State<'_, Arc<Mutex<Option<TursoManager>>>>,
     sheet: DailySheet,
 ) -> Result<(), String> {
-    storage.save_daily_sheet(sheet)
+    let date = sheet.date.clone();
+    let goal = sheet.main_goal.clone();
+    let total_mins = sheet.total_minutes_studied;
+    let json_data = serde_json::to_string(&sheet).unwrap_or_default();
+
+    storage.save_daily_sheet(sheet)?;
+
+    // Idempotent write to SQLite / Turso WAL database
+    let turso_clone = turso.inner().clone();
+    tokio::spawn(async move {
+        let guard = turso_clone.lock().await;
+        if let Some(ref manager) = *guard {
+            let _ = manager
+                .upsert_daily_sheet(&date, &goal, total_mins, &json_data)
+                .await;
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -29,11 +48,23 @@ pub fn load_subjects(storage: State<'_, StorageManager>) -> Vec<SubjectItem> {
 }
 
 #[tauri::command]
-pub fn save_subjects(
+pub async fn save_subjects(
     storage: State<'_, StorageManager>,
+    turso: State<'_, Arc<Mutex<Option<TursoManager>>>>,
     subjects: Vec<SubjectItem>,
 ) -> Result<(), String> {
-    storage.save_subjects(subjects)
+    let subjects_clone = subjects.clone();
+    storage.save_subjects(subjects)?;
+
+    let turso_clone = turso.inner().clone();
+    tokio::spawn(async move {
+        let guard = turso_clone.lock().await;
+        if let Some(ref manager) = *guard {
+            let _ = manager.upsert_subjects(&subjects_clone).await;
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -47,6 +78,44 @@ pub fn save_timer_config(
     config: TimerConfig,
 ) -> Result<(), String> {
     storage.save_timer_config(config)
+}
+
+#[tauri::command]
+pub fn load_dday_events(storage: State<'_, StorageManager>) -> Vec<DDayEvent> {
+    storage.get_dday_events()
+}
+
+#[tauri::command]
+pub async fn save_dday_events(
+    storage: State<'_, StorageManager>,
+    turso: State<'_, Arc<Mutex<Option<TursoManager>>>>,
+    events: Vec<DDayEvent>,
+) -> Result<(), String> {
+    let events_clone = events.clone();
+    storage.save_dday_events(events)?;
+
+    let turso_clone = turso.inner().clone();
+    tokio::spawn(async move {
+        let guard = turso_clone.lock().await;
+        if let Some(ref manager) = *guard {
+            let _ = manager.upsert_dday_events(&events_clone).await;
+        }
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn load_bottom_memo_preset(storage: State<'_, StorageManager>) -> String {
+    storage.get_bottom_memo_preset()
+}
+
+#[tauri::command]
+pub fn save_bottom_memo_preset(
+    storage: State<'_, StorageManager>,
+    preset: String,
+) -> Result<(), String> {
+    storage.save_bottom_memo_preset(preset)
 }
 
 #[tauri::command]

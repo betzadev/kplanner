@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { DailySheet, SubjectItem, TimerConfig } from '../types';
+import { DailySheet, DDayEvent, SubjectItem, TimerConfig } from '../types';
 
 // Check if Tauri environment is available
 function isTauri(): boolean {
@@ -76,6 +76,48 @@ export const tauriApi = {
       return true;
     } catch (e) {
       console.warn('Tauri invoke save_timer_config error:', e);
+      return false;
+    }
+  },
+
+  async loadDDayEvents(): Promise<DDayEvent[] | null> {
+    if (!isTauri()) return null;
+    try {
+      return await invoke<DDayEvent[]>('load_dday_events');
+    } catch (e) {
+      console.warn('Tauri invoke load_dday_events error:', e);
+      return null;
+    }
+  },
+
+  async saveDDayEvents(events: DDayEvent[]): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      await invoke('save_dday_events', { events });
+      return true;
+    } catch (e) {
+      console.warn('Tauri invoke save_dday_events error:', e);
+      return false;
+    }
+  },
+
+  async loadBottomMemoPreset(): Promise<string | null> {
+    if (!isTauri()) return null;
+    try {
+      return await invoke<string>('load_bottom_memo_preset');
+    } catch (e) {
+      console.warn('Tauri invoke load_bottom_memo_preset error:', e);
+      return null;
+    }
+  },
+
+  async saveBottomMemoPreset(preset: string): Promise<boolean> {
+    if (!isTauri()) return false;
+    try {
+      await invoke('save_bottom_memo_preset', { preset });
+      return true;
+    } catch (e) {
+      console.warn('Tauri invoke save_bottom_memo_preset error:', e);
       return false;
     }
   },
