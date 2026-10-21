@@ -26,11 +26,11 @@ libsql = { version = "0.6", default-features = false, features = ["replication",
 
 # Aggressive binary size optimization for release / mobile builds
 [profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
 opt-level = "z"
-strip = true
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
 
 [dev-dependencies]
 rusqlite = { version = "0.31", features = ["bundled"] }

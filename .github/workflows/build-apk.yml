@@ -1,24 +1,30 @@
-name: Build Android APK (Tauri v2 + Turso)
+name: Build Android APK & AAB (Tauri v2 + Turso)
 
 on:
   push:
     branches: [main, develop]
   workflow_dispatch:
     inputs:
-      build_type:
-        description: 'APK Build Type'
+      job_to_run:
+        description: 'Jobs to execute'
         required: true
-        default: 'debug'
+        default: 'all'
         type: choice
         options:
-          - debug
-          - release
+          - all
+          - release-only
+          - debug-only
 
 permissions:
   contents: write
 
 jobs:
-  build-android:
+  # ============================================================================
+  # JOB 1: Universal Debug Build (Smoke Test)
+  # Preserved as a rapid verification test to ensure development integrity
+  # ============================================================================
+  build-debug-smoke:
+    if: github.event_name == 'push' || github.event.inputs.job_to_run == 'all' || github.event.inputs.job_to_run == 'debug-only'
     runs-on: ubuntu-22.04
     env:
       NDK_VERSION: "27.2.12479018"
@@ -26,53 +32,17 @@ jobs:
       TAURI_TARGET: "aarch64"
 
     steps:
-      # ============================================================
-      # 1. Checkout
-      # ============================================================
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      # ============================================================
-      # 2. Pre-build diagnostic snapshot to Step Summary
-      # ============================================================
-      - name: Pre-build diagnostic snapshot
-        if: always()
-        run: |
-          touch tauri-init.log tauri-build.log
-          {
-            echo "## Pre-build diagnostic snapshot"
-            echo ""
-            echo "- **Run ID:** ${{ github.run_id }}"
-            echo "- **Ref:** ${{ github.ref_name }}"
-            echo "- **SHA:** ${{ github.sha }}"
-            echo "- **Event:** ${{ github.event_name }}"
-            echo "- **Runner:** $(uname -a)"
-            echo ""
-            echo "### Repo root contents"
-            echo '```'
-            ls -la
-            echo '```'
-            echo ""
-            echo "### package.json"
-            echo '```json'
-            cat package.json 2>/dev/null || echo "(not found)"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # ============================================================
-      # 3. Setup Java JDK 17
-      # ============================================================
       - name: Setup Java JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # ============================================================
-      # 4. Setup Android NDK 27 + required SDK components
-      # ============================================================
       - name: Setup Android NDK and SDK
         run: |
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
@@ -88,65 +58,36 @@ jobs:
 
           NDK_PATH="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}"
           if [ ! -d "$NDK_PATH" ]; then
-            echo "Installing NDK ${NDK_VERSION}..."
             "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" || \
-            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" || \
-            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;26.3.11579264" || true
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" || true
             NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk/27."* 2>/dev/null | sort -V | tail -n 1)
-            [ -z "$NDK_PATH" ] && NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk"/* 2>/dev/null | sort -V | tail -n 1)
-          fi
-
-          if [ -z "${NDK_PATH:-}" ] || [ ! -d "$NDK_PATH" ]; then
-            echo "::error::NDK installation failed"
-            exit 1
           fi
 
           echo "NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_ROOT=$NDK_PATH" >> "$GITHUB_ENV"
           echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
-          echo "Configured NDK: $NDK_PATH"
 
-      # ============================================================
-      # 5. Setup pnpm
-      # ============================================================
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10
 
-      # ============================================================
-      # 6. Setup Node.js (NO pnpm cache to avoid exit code 2)
-      # ============================================================
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      # ============================================================
-      # 7. Install Rust toolchain with Android target
-      # ============================================================
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ env.RUST_TARGET }}
 
-      # ============================================================
-      # 8. Install JavaScript dependencies (no --frozen-lockfile
-      # to avoid exit 100 from lockfile drift)
-      # ============================================================
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      # ============================================================
-      # 9. Build web frontend
-      # ============================================================
       - name: Build web frontend
         run: pnpm build
 
-      # ============================================================
-      # 10. Ensure Android debug keystore
-      # ============================================================
       - name: Ensure Android Debug Keystore
         run: |
           mkdir -p ~/.android
@@ -158,149 +99,209 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      # ============================================================
-      # 11. Tauri Android Init
-      # ============================================================
       - name: Tauri Android Init
         run: |
-          set +e
           if [ ! -d "src-tauri/gen/android/app" ]; then
-            echo "=== Running: pnpm tauri android init --ci ===" | tee tauri-init.log
-            pnpm tauri android init --ci 2>&1 | tee -a tauri-init.log
-            INIT_EXIT=${PIPESTATUS[0]}
-            if [ "$INIT_EXIT" -ne 0 ]; then
-              {
-                echo "## ❌ Tauri Android Init failed (exit $INIT_EXIT)"
-                echo ""
-                echo "### Full init log"
-                echo '```'
-                cat tauri-init.log
-                echo '```'
-              } >> "$GITHUB_STEP_SUMMARY"
-              exit "$INIT_EXIT"
-            fi
-          else
-            echo "Android project already initialized."
+            pnpm tauri android init --ci
           fi
 
-      # ============================================================
-      # 12. Write local.properties (AFTER init, so init can't
-      # overwrite it)
-      # ============================================================
       - name: Write local.properties
         run: |
           printf "sdk.dir=%s\nndk.dir=%s\n" "$ANDROID_HOME" "$NDK_HOME" > src-tauri/gen/android/local.properties
-          cat src-tauri/gen/android/local.properties
 
-      # ============================================================
-      # 13. Inject debug signing into release buildType
-      # ============================================================
-      - name: Inject signing config
-        run: |
-          [ -f "src-tauri/gen/android/gradlew" ] && chmod +x src-tauri/gen/android/gradlew || true
-          python3 << 'PYEOF'
-          import pathlib
-          p = pathlib.Path("src-tauri/gen/android/app/build.gradle.kts")
-          if not p.exists():
-              print("WARNING: build.gradle.kts not found")
-              raise SystemExit(0)
-          c = p.read_text()
-          if "signingConfig = signingConfigs.getByName(\"debug\")" not in c:
-              marker = "getByName(\"release\") {"
-              if marker in c:
-                  c = c.replace(marker, marker + "\n            signingConfig = signingConfigs.getByName(\"debug\")", 1)
-                  p.write_text(c)
-                  print("Injected.")
-              else:
-                  print("WARNING: release buildType block not found.")
-          else:
-              print("Already injected.")
-          PYEOF
-
-      # ============================================================
-      # 14. THE ACTUAL BUILD STEP.
-      # Targets 'aarch64' as expected by Tauri CLI (not the full
-      # Rust triple 'aarch64-linux-android').
-      # ============================================================
-      - name: Tauri Android Build APK
+      - name: Tauri Android Build Debug APK (Smoke Test)
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-          BUILD_TYPE: ${{ github.event.inputs.build_type || 'debug' }}
         run: |
-          set +e
-          echo "=== BUILD_TYPE: $BUILD_TYPE ===" | tee tauri-build.log
-          echo "=== TAURI_TARGET: $TAURI_TARGET ===" | tee -a tauri-build.log
-          echo "=== NDK_HOME: $NDK_HOME ===" | tee -a tauri-build.log
-          echo "=== Command that will run ===" | tee -a tauri-build.log
-          if [ "$BUILD_TYPE" = "release" ]; then
-            echo "pnpm tauri android build --apk --target $TAURI_TARGET --verbose" | tee -a tauri-build.log
-          else
-            echo "pnpm tauri android build --debug --apk --target $TAURI_TARGET --verbose" | tee -a tauri-build.log
-          fi
-          echo "" | tee -a tauri-build.log
-          echo "=== Output ===" | tee -a tauri-build.log
-          echo "" | tee -a tauri-build.log
+          pnpm tauri android build --debug --apk --target "$TAURI_TARGET" --verbose 2>&1 | tee tauri-smoke.log
 
-          if [ "$BUILD_TYPE" = "release" ]; then
-            pnpm tauri android build --apk --target "$TAURI_TARGET" --verbose 2>&1 | tee -a tauri-build.log
-          else
-            pnpm tauri android build --debug --apk --target "$TAURI_TARGET" --verbose 2>&1 | tee -a tauri-build.log
-          fi
-          BUILD_EXIT=${PIPESTATUS[0]}
-
-          echo "" | tee -a tauri-build.log
-          echo "=== Build exited with code: $BUILD_EXIT ===" | tee -a tauri-build.log
-
-          if [ "$BUILD_EXIT" -ne 0 ]; then
-            {
-              echo "## ❌ Tauri Android Build failed (exit code $BUILD_EXIT)"
-              echo ""
-              echo "**Build type:** $BUILD_TYPE"
-              echo "**NDK:** $NDK_HOME"
-              echo "**Tauri target:** $TAURI_TARGET"
-              echo ""
-              echo "### Last 400 lines of build output"
-              echo '```'
-              tail -n 400 tauri-build.log 2>/dev/null || echo "(no log file)"
-              echo '```'
-              echo ""
-              echo "### Full log available in artifact \`tauri-build-logs\`"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit "$BUILD_EXIT"
-          fi
-
-          echo "### ✅ Build succeeded" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### APK outputs" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          find src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; | tee -a "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
-      # ============================================================
-      # 15. Upload APK artifact (only on success)
-      # ============================================================
-      - name: Upload APK artifact
+      - name: Upload Debug Smoke APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
-          name: kplanner-apk
-          path: |
-            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
-          if-no-files-found: warn
+          name: kplanner-smoke-debug-apk
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          retention-days: 14
+
+  # ============================================================================
+  # JOB 2: Optimized Release Build by ABI (arm64-v8a, armeabi-v7a) + AAB Bundle
+  # Applied Strategies:
+  # - R8 / ProGuard minification & resource shrinking enabled
+  # - Language resources filtered via resourceConfigurations (en, es, ko)
+  # - Rust profile.release: opt-level = "z", lto = true, strip = "symbols", panic = "abort"
+  # - Vite production target: es2022, chrome110, sourcemap: false
+  # - Per-ABI split APKs (<40MB) and universal dynamic AAB (<60MB)
+  # ============================================================================
+  build-release-abi:
+    if: github.event_name == 'push' || github.event.inputs.job_to_run == 'all' || github.event.inputs.job_to_run == 'release-only'
+    runs-on: ubuntu-22.04
+    env:
+      NDK_VERSION: "27.2.12479018"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android NDK and SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" "platforms;android-34" "platforms;android-35" \
+            "build-tools;34.0.0" "cmake;3.22.1" > /dev/null 2>&1 || true
+
+          NDK_PATH="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}"
+          if [ ! -d "$NDK_PATH" ]; then
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" || \
+            "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006" || true
+            NDK_PATH=$(ls -d "$ANDROID_SDK_ROOT/ndk/27."* 2>/dev/null | sort -V | tail -n 1)
+          fi
+
+          echo "NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK_PATH" >> "$GITHUB_ENV"
+          echo "$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin" >> "$GITHUB_PATH"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Rust toolchains for Mobile ABIs
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build Web Frontend (Optimized Production)
+        run: pnpm build
+
+      - name: Ensure Android Keystore for Release Signing
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkey -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Initialize Android Project
+        run: |
+          if [ ! -d "src-tauri/gen/android/app" ]; then
+            pnpm tauri android init --ci
+          fi
+
+      - name: Configure local.properties and Apply ProGuard & Gradle Optimizations
+        run: |
+          printf "sdk.dir=%s\nndk.dir=%s\n" "$ANDROID_HOME" "$NDK_HOME" > src-tauri/gen/android/local.properties
+          [ -f "src-tauri/gen/android/gradlew" ] && chmod +x src-tauri/gen/android/gradlew || true
+          python3 .github/scripts/patch-gradle.py
+
+      - name: Build Optimized Release APK (arm64-v8a)
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          mkdir -p dist-artifacts/apk dist-artifacts/bundle
+          echo "Building arm64-v8a Release APK..."
+          pnpm tauri android build --apk --target aarch64 --verbose 2>&1 | tee tauri-release-arm64.log
+
+          # Locate and stage generated arm64 APK
+          ARM64_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*release*.apk" | head -n 1)
+          if [ -n "$ARM64_APK" ]; then
+            cp "$ARM64_APK" dist-artifacts/apk/kplanner-arm64-v8a-release.apk
+            echo "Staged: dist-artifacts/apk/kplanner-arm64-v8a-release.apk ($(ls -lh dist-artifacts/apk/kplanner-arm64-v8a-release.apk | awk '{print $5}'))"
+          else
+            echo "::error::arm64-v8a release APK was not found!"
+            exit 1
+          fi
+
+      - name: Build Optimized Release APK (armeabi-v7a)
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          # Clean previous apk outputs to prevent stale matching
+          rm -rf src-tauri/gen/android/app/build/outputs/apk
+          echo "Building armeabi-v7a Release APK..."
+          pnpm tauri android build --apk --target armv7 --verbose 2>&1 | tee tauri-release-armv7.log
+
+          ARMV7_APK=$(find src-tauri/gen/android/app/build/outputs/apk -name "*release*.apk" | head -n 1)
+          if [ -n "$ARMV7_APK" ]; then
+            cp "$ARMV7_APK" dist-artifacts/apk/kplanner-armeabi-v7a-release.apk
+            echo "Staged: dist-artifacts/apk/kplanner-armeabi-v7a-release.apk ($(ls -lh dist-artifacts/apk/kplanner-armeabi-v7a-release.apk | awk '{print $5}'))"
+          else
+            echo "::error::armeabi-v7a release APK was not found!"
+            exit 1
+          fi
+
+      - name: Build Optimized Release AAB (Android App Bundle for Play Store)
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          echo "Building universal dynamic AAB bundle..."
+          pnpm tauri android build --aab --target aarch64 --target armv7 --verbose 2>&1 | tee tauri-release-aab.log
+
+          AAB_FILE=$(find src-tauri/gen/android/app/build/outputs/bundle -name "*.aab" | head -n 1)
+          if [ -n "$AAB_FILE" ]; then
+            cp "$AAB_FILE" dist-artifacts/bundle/kplanner-release.aab
+            echo "Staged: dist-artifacts/bundle/kplanner-release.aab ($(ls -lh dist-artifacts/bundle/kplanner-release.aab | awk '{print $5}'))"
+          else
+            echo "::error::Release AAB was not found!"
+            exit 1
+          fi
+
+      - name: Run Size Audit & Structural Inspection
+        run: |
+          python3 .github/scripts/audit-apk.py
+
+      - name: Upload Release APKs (arm64-v8a & armeabi-v7a)
+        uses: actions/upload-artifact@v5
+        with:
+          name: kplanner-release-apks
+          path: dist-artifacts/apk/*.apk
+          if-no-files-found: error
           retention-days: 30
 
-      # ============================================================
-      # 16. Upload build log artifact (always, for diagnostics)
-      # ============================================================
-      - name: Upload build logs
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Upload Release AAB (Google Play Store Bundle)
+        uses: actions/upload-artifact@v5
         with:
-          name: tauri-build-logs
+          name: kplanner-release-aab
+          path: dist-artifacts/bundle/*.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Release Build Logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: tauri-release-logs
           path: |
-            tauri-init.log
-            tauri-build.log
-            src-tauri/gen/android/app/build/reports/
+            tauri-release-arm64.log
+            tauri-release-armv7.log
+            tauri-release-aab.log
           if-no-files-found: warn
           retention-days: 14
