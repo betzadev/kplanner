@@ -577,11 +577,11 @@ export function ShareCardModal({ isOpen, onClose, date, sheet }: ShareCardModalP
         ctx.fillStyle = '#1E3A8A';
         ctx.font = '700 11px Inter, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(labels[i]?.toUpperCase() || defaultLabels[i].toUpperCase(), boxX + memoW / 2, memoY + 20);
+        ctx.fillText(labels[i]?.toUpperCase() || (defaultLabels[i]?.toUpperCase() ?? ''), boxX + memoW / 2, memoY + 20);
         ctx.textAlign = 'left';
 
         // Content or writing lines
-        const content = memos[i];
+        const content = memos[i] ?? '';
         if (content && content.trim()) {
           ctx.fillStyle = '#1E293B';
           ctx.font = '500 12px Inter, sans-serif';

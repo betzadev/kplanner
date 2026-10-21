@@ -142,7 +142,8 @@ export function AnalyticsView() {
   const annualMonths = useMemo(() => {
     const months = Array.from({ length: 12 }, (_, i) => ({
       month: i + 1,
-      label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
+      // SAFETY: i < 12 and labels has 12 items
+      label: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i]!,
       minutes: 0,
       daysStudied: 0,
     }));
@@ -150,16 +151,17 @@ export function AnalyticsView() {
     Object.entries(dailySheets).forEach(([dateStr, sheet]) => {
       if (dateStr.startsWith(String(currentYear))) {
         const parts = dateStr.split('-');
-        const m = parseInt(parts[1], 10);
+        const m = parseInt(parts[1] ?? '0', 10);
         let mins = sheet.totalMinutesStudied ?? 0;
         if (mins === 0 && sheet.timeGrid) {
           Object.values(sheet.timeGrid).forEach((cell) => {
             if (cell.subjectId) mins += Math.round(10 * (cell.fillRatio ?? 1.0));
           });
         }
-        if (mins > 0) {
-          months[m - 1].minutes += mins;
-          months[m - 1].daysStudied += 1;
+        const targetMonth = months[m - 1];
+        if (targetMonth && mins > 0) {
+          targetMonth.minutes += mins;
+          targetMonth.daysStudied += 1;
         }
       }
     });
@@ -235,7 +237,7 @@ export function AnalyticsView() {
     let peakStartHour = 9;
     for (let h = 0; h < 24; h++) {
       const h2 = (h + 1) % 24;
-      const windowSum = hourlyDistribution[h] + hourlyDistribution[h2];
+      const windowSum = (hourlyDistribution[h] ?? 0) + (hourlyDistribution[h2] ?? 0);
       if (windowSum > max2hMins) {
         max2hMins = windowSum;
         peakStartHour = h;

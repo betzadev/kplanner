@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { DateString, EntityId } from '../../types';
+import { X, Calendar, Layers, CheckCircle2 } from 'lucide-react';
 import { useSubjectStore } from '../../store/useSubjectStore';
 import { usePlannerStore } from '../../store/usePlannerStore';
+import { DateString, EntityId } from '../../types';
 import { triggerHaptic } from '../../utils/haptics';
-import { parseDateString, toDateString } from '../../utils/timeSlotMapper';
-import { X, Layers, Sparkles } from 'lucide-react';
 
 interface AutoSplitModalProps {
   isOpen: boolean;
@@ -15,7 +13,7 @@ interface AutoSplitModalProps {
 
 export function AutoSplitModal({ isOpen, onClose, currentDate }: AutoSplitModalProps) {
   const subjects = useSubjectStore((state) => state.subjects);
-  const selectedSubjectId = useSubjectStore((state) => state.selectedSubjectId) ?? subjects[0]?.id;
+  const selectedSubjectId = useSubjectStore((state) => state.selectedSubjectId) ?? subjects[0]?.id ?? ('' as EntityId);
   const addTask = usePlannerStore((state) => state.addTask);
 
   const [title, setTitle] = useState('');
@@ -34,210 +32,226 @@ export function AutoSplitModal({ isOpen, onClose, currentDate }: AutoSplitModalP
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen || typeof document === "undefined") return null;
-
-  // Calculate days count
-  const startDate = parseDateString(currentDate);
-  const endDate = deadlineDate ? new Date(deadlineDate + 'T00:00:00') : null;
-
-  let daysAvailable: DateString[] = [];
-  if (endDate && endDate >= startDate) {
-    const cur = new Date(startDate);
-    while (cur <= endDate) {
-      const dayOfWeek = cur.getDay(); // 0 is Sunday, 6 is Saturday
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-      if (includeWeekends || !isWeekend) {
-        daysAvailable.push(toDateString(cur));
-      }
-      cur.setDate(cur.getDate() + 1);
+  useEffect(() => {
+    if (selectedSubjectId) {
+      setSubjectId(selectedSubjectId);
     }
-  }
+  }, [selectedSubjectId]);
 
-  const daysCount = daysAvailable.length;
+  if (!isOpen) return null;
+
+  const calculateDays = (): DateString[] => {
+    if (!deadlineDate) return [];
+    const start = new Date(currentDate);
+    const end = new Date(deadlineDate);
+    if (end <= start) return [];
+
+    const days: DateString[] = [];
+    const curr = new Date(start);
+
+    while (curr <= end) {
+      const dayOfWeek = curr.getDay(); // 0 is Sunday, 6 is Saturday
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+      if (includeWeekends || !isWeekend) {
+        const y = curr.getFullYear();
+        const m = String(curr.getMonth() + 1).padStart(2, '0');
+        const d = String(curr.getDate()).padStart(2, '0');
+        days.push(`${y}-${m}-${d}` as DateString);
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    return days;
+  };
+
+  const activeDays = calculateDays();
+  const daysCount = activeDays.length;
   const unitsPerDay = daysCount > 0 ? Math.ceil(totalUnits / daysCount) : 0;
 
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !subjectId || daysCount === 0 || totalUnits <= 0) return;
+    if (!title.trim() || totalUnits <= 0 || daysCount <= 0) return;
 
+    let remaining = totalUnits;
     let currentStart = 1;
-    daysAvailable.forEach((dayStr, index) => {
-      const isLastDay = index === daysCount - 1;
-      const currentEnd = isLastDay ? totalUnits : Math.min(totalUnits, currentStart + unitsPerDay - 1);
 
-      let taskLabel = '';
+    activeDays.forEach((targetDate, idx) => {
+      const dayAmount = Math.min(unitsPerDay, remaining);
+      if (dayAmount <= 0) return;
+
+      const currentEnd = currentStart + dayAmount - 1;
+      let taskTitle = '';
+
       if (unitType === 'pages') {
-        taskLabel = `${title.trim()}: pp. ${currentStart}-${currentEnd}`;
+        taskTitle = `${title}: pp. ${currentStart}-${currentEnd}`;
       } else if (unitType === 'chapters') {
-        taskLabel = currentStart === currentEnd
-          ? `${title.trim()}: Ch. ${currentStart}`
-          : `${title.trim()}: Ch. ${currentStart}-${currentEnd}`;
+        taskTitle = `${title}: Ch. ${currentStart}${currentStart !== currentEnd ? `-${currentEnd}` : ''}`;
       } else if (unitType === 'problems') {
-        taskLabel = `${title.trim()}: Problems #${currentStart}-${currentEnd}`;
+        taskTitle = `${title}: Problems #${currentStart}-${currentEnd}`;
       } else {
-        taskLabel = `${title.trim()}: ${unitsPerDay}h study session`;
+        taskTitle = `${title}: ${dayAmount} hours (Part ${idx + 1})`;
       }
 
-      addTask(dayStr, taskLabel, subjectId);
+      addTask(targetDate, subjectId, taskTitle);
+      remaining -= dayAmount;
       currentStart = currentEnd + 1;
     });
 
-    triggerHaptic('success');
+    triggerHaptic('medium');
     onClose();
   };
 
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
-    <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
-    >
-      <div className="bg-white dark:bg-slate-900 border border-[#C2D8FC] dark:border-slate-800 rounded-3xl p-5 w-full max-w-sm shadow-xl space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E4EDFC] dark:border-slate-800 pb-3">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#E4EDFC] dark:bg-slate-800 flex items-center justify-center text-blue-600 dark:text-[#9FC6FC]">
-              <Layers size={18} />
+            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 rounded-xl text-indigo-600 dark:text-indigo-400">
+              <Layers size={20} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                Workload Auto-Splitter
-              </h3>
-              <p className="text-[10px] text-slate-400">Distribute macro goals across days</p>
+              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                Auto-Split Syllabus / Book
+              </h2>
+              <p className="text-xs text-slate-500">Divide chapters or pages automatically into daily study tasks</p>
             </div>
           </div>
           <button
-            type="button"
             onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+            className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
           >
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleGenerate} className="space-y-3">
+        <form onSubmit={handleGenerate} className="space-y-4">
           <div>
-            <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-              Goal or Book Title
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Title / Resource Name
             </label>
             <input
               type="text"
-              placeholder="e.g. Calculus Vol. 1, History Review"
+              required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#9FC6FC]"
-              required
+              placeholder="e.g., Organic Chemistry Vol. 1"
+              className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
 
-          {/* Subject selector */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-              Subject
-            </label>
-            <select
-              value={subjectId}
-              onChange={(e) => setSubjectId(e.target.value)}
-              className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#9FC6FC] cursor-pointer"
-            >
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Unit Type & Total Units */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                Unit Type
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Subject
               </label>
               <select
-                value={unitType}
-                onChange={(e) => setUnitType(e.target.value as 'pages' | 'chapters' | 'hours' | 'problems')}
-                className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#9FC6FC] cursor-pointer"
+                value={subjectId}
+                onChange={(e) => setSubjectId(e.target.value as EntityId)}
+                className="w-full text-sm px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
               >
-                <option value="pages">Pages</option>
-                <option value="chapters">Chapters</option>
-                <option value="problems">Problems</option>
-                <option value="hours">Hours</option>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                Total Amount
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Unit Type
+              </label>
+              <select
+                value={unitType}
+                onChange={(e) => setUnitType(e.target.value as any)}
+                className="w-full text-sm px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              >
+                <option value="pages">Pages (pp.)</option>
+                <option value="chapters">Chapters</option>
+                <option value="problems">Practice Problems</option>
+                <option value="hours">Hours</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Total {unitType.charAt(0).toUpperCase() + unitType.slice(1)}
               </label>
               <input
                 type="number"
-                min={1}
-                value={totalUnits}
-                onChange={(e) => setTotalUnits(Number(e.target.value))}
-                className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#9FC6FC]"
+                min="1"
                 required
+                value={totalUnits}
+                onChange={(e) => setTotalUnits(parseInt(e.target.value) || 0)}
+                className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Deadline Date
+              </label>
+              <input
+                type="date"
+                required
+                min={currentDate}
+                value={deadlineDate}
+                onChange={(e) => setDeadlineDate(e.target.value)}
+                className="w-full text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
               />
             </div>
           </div>
 
-          {/* Deadline Date */}
-          <div>
-            <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-              Target Deadline
-            </label>
-            <input
-              type="date"
-              min={currentDate}
-              value={deadlineDate}
-              onChange={(e) => setDeadlineDate(e.target.value)}
-              className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#9FC6FC] cursor-pointer"
-              required
-            />
-          </div>
-
-          {/* Weekend Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer pt-1">
+          <div className="flex items-center gap-2 pt-1">
             <input
               type="checkbox"
+              id="weekends"
               checked={includeWeekends}
               onChange={(e) => setIncludeWeekends(e.target.checked)}
-              className="rounded text-blue-600 focus:ring-blue-500"
+              className="rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <span className="text-xs text-slate-600 dark:text-slate-300">
-              Include weekend study days
-            </span>
-          </label>
+            <label htmlFor="weekends" className="text-xs text-slate-600 dark:text-slate-400 select-none cursor-pointer">
+              Include weekends in calculation
+            </label>
+          </div>
 
-          {/* Distribution Preview Card */}
+          {/* Breakdown Preview Banner */}
           {daysCount > 0 && (
-            <div className="p-3 rounded-2xl bg-[#E4EDFC]/60 dark:bg-slate-800/60 border border-[#C2D8FC] dark:border-slate-700 text-xs space-y-1">
-              <div className="flex items-center justify-between font-bold text-blue-900 dark:text-[#9FC6FC]">
-                <span>Daily Target:</span>
-                <span className="font-mono text-sm">~{unitsPerDay} {unitType}/day</span>
+            <div className="p-3.5 bg-indigo-50/70 dark:bg-indigo-950/40 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-900 dark:text-indigo-200 flex items-start gap-2.5">
+              <Calendar className="text-indigo-500 shrink-0 mt-0.5" size={16} />
+              <div>
+                <p className="font-semibold">
+                  {daysCount} study days scheduled
+                </p>
+                <p className="opacity-80 mt-0.5">
+                  Approx. <strong className="text-indigo-600 dark:text-indigo-300">{unitsPerDay} {unitType}/day</strong> will be appended to each day's study list.
+                </p>
               </div>
-              <p className="text-[10px] text-slate-500">
-                Spans across <strong>{daysCount}</strong> study days starting today.
-              </p>
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={!title.trim() || daysCount === 0 || totalUnits <= 0}
-            className="w-full flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-          >
-            <Sparkles size={14} />
-            <span>Distribute Tasks Across Sheets</span>
-          </button>
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold text-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={daysCount <= 0 || !title.trim()}
+              className="flex-1 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/20"
+            >
+              <CheckCircle2 size={15} />
+              Generate Schedule
+            </button>
+          </div>
         </form>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }

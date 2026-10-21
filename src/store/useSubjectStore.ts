@@ -35,7 +35,8 @@ export const useSubjectStore = create<SubjectStore>()(
   persist(
     (set, get) => ({
       subjects: INITIAL_DEFAULT_SUBJECTS,
-      selectedSubjectId: INITIAL_DEFAULT_SUBJECTS[0].id,
+      // SAFETY: INITIAL_DEFAULT_SUBJECTS has 8 hardcoded elements
+      selectedSubjectId: INITIAL_DEFAULT_SUBJECTS[0]!.id,
 
       initFromRust: async () => {
         const loaded = await tauriApi.loadSubjects();
@@ -45,8 +46,9 @@ export const useSubjectStore = create<SubjectStore>()(
             s.name === 'Korean Language' ? { ...s, name: 'Language Arts' } : s
           );
           set({ subjects: cleaned });
-          if (!get().selectedSubjectId && cleaned.length > 0) {
-            set({ selectedSubjectId: cleaned[0].id });
+          const [first] = cleaned;
+          if (!get().selectedSubjectId && first) {
+            set({ selectedSubjectId: first.id });
           }
         }
       },
@@ -117,7 +119,8 @@ export const useSubjectStore = create<SubjectStore>()(
       resetToDefaults: () => {
         set({
           subjects: INITIAL_DEFAULT_SUBJECTS,
-          selectedSubjectId: INITIAL_DEFAULT_SUBJECTS[0].id,
+          // SAFETY: INITIAL_DEFAULT_SUBJECTS has 8 hardcoded elements
+      selectedSubjectId: INITIAL_DEFAULT_SUBJECTS[0]!.id,
         });
         tauriApi.saveSubjects(INITIAL_DEFAULT_SUBJECTS);
       },

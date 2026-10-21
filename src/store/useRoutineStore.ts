@@ -70,9 +70,9 @@ export const useRoutineStore = create<RoutineState>()(
         // Group cells by subjectId to batch paint
         const subjectCellsMap = new Map<EntityId, Array<{ hour: HourValue; tenMinIndex: TenMinuteIndex }>>();
         Object.entries(template.planBlocks).forEach(([key, subjectId]) => {
-          const [hStr, tStr] = key.split('-');
-          const hour = parseInt(hStr, 10) as HourValue;
-          const tenMinIndex = parseInt(tStr, 10) as TenMinuteIndex;
+          const parts = key.split('-');
+          const hour = parseInt(parts[0] ?? '0', 10) as HourValue;
+          const tenMinIndex = parseInt(parts[1] ?? '0', 10) as TenMinuteIndex;
           if (!subjectCellsMap.has(subjectId)) {
             subjectCellsMap.set(subjectId, []);
           }

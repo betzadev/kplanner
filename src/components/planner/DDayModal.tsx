@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { HexColor, DEFAULT_PASTEL_PALETTE } from '../../types';
-import { useDDayStore, calculateDDay } from '../../store/useDDayStore';
+import { X, Calendar, Plus, Trash2, Pin } from 'lucide-react';
+import { useDDayStore } from '../../store/useDDayStore';
+import { DateString, HexColor, DEFAULT_PASTEL_PALETTE } from '../../types';
 import { triggerHaptic } from '../../utils/haptics';
-import { X, Plus, Trash2, Pin, Flame } from 'lucide-react';
 
 interface DDayModalProps {
   isOpen: boolean;
   onClose: () => void;
-  currentDate: string;
+  currentDate: DateString;
 }
 
 export function DDayModal({ isOpen, onClose, currentDate }: DDayModalProps) {
   const { events, addEvent, deleteEvent, togglePin } = useDDayStore();
   const [newTitle, setNewTitle] = useState('');
   const [newTargetDate, setNewTargetDate] = useState('');
-  const [newColor, setNewColor] = useState<HexColor>(DEFAULT_PASTEL_PALETTE[0]);
+  const [newColor, setNewColor] = useState<HexColor>(DEFAULT_PASTEL_PALETTE[0] ?? ('#C2D8FC' as HexColor));
 
 
   const handleAdd = (e: React.FormEvent) => {
@@ -36,102 +35,82 @@ export function DDayModal({ isOpen, onClose, currentDate }: DDayModalProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen || typeof document === "undefined") return null;
+  if (!isOpen) return null;
 
-  return createPortal(
-    <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
-    >
-      <div className="bg-white dark:bg-slate-900 border border-[#C2D8FC] dark:border-slate-800 rounded-3xl p-5 w-full max-w-sm shadow-xl space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#E4EDFC] dark:border-slate-800 pb-3">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#E4EDFC] dark:bg-slate-800 flex items-center justify-center text-blue-600 dark:text-[#9FC6FC]">
-              <Flame size={18} />
+            <div className="p-2 bg-rose-50 dark:bg-rose-950/60 rounded-xl text-rose-600 dark:text-rose-400">
+              <Calendar size={20} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                D-Day Countdowns
-              </h3>
-              <p className="text-[10px] text-slate-400">Track exams, targets & milestones</p>
+              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">
+                D-Day Milestones
+              </h2>
+              <p className="text-xs text-slate-500">Track exams, certifications, or major goals</p>
             </div>
           </div>
           <button
-            type="button"
             onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
+            className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Existing Events List */}
-        <div className="max-h-52 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+        <div className="space-y-2 mb-6 max-h-56 overflow-y-auto pr-1">
           {events.length === 0 ? (
-            <p className="text-xs text-center text-slate-400 py-4">No countdowns created yet.</p>
+            <p className="text-center py-6 text-xs text-slate-400">No D-Day goals yet. Add one below!</p>
           ) : (
             events.map((ev) => {
-              const dday = calculateDDay(ev.targetDate, currentDate);
+              const target = new Date(ev.targetDate);
+              const current = new Date(currentDate);
+              const diffTime = target.getTime() - current.getTime();
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              const dDayStr = diffDays === 0 ? 'D-Day' : diffDays > 0 ? `D-${diffDays}` : `D+${Math.abs(diffDays)}`;
+
               return (
                 <div
                   key={ev.id}
-                  className="flex items-center justify-between p-2.5 rounded-2xl border border-[#E4EDFC] dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50"
+                  className="flex items-center justify-between p-3 rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
                     <span
                       className="w-3 h-3 rounded-full shrink-0"
                       style={{ backgroundColor: ev.colorId }}
                     />
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                        {ev.title}
-                      </p>
+                    <div className="truncate">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{ev.title}</p>
                       <p className="text-[10px] text-slate-400">{ev.targetDate}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <span
-                      className={`text-xs font-black font-mono px-2 py-0.5 rounded-full ${
-                        dday.isToday
-                          ? 'bg-rose-500 text-white'
-                          : dday.isPast
-                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                          : 'bg-[#9FC6FC]/40 text-blue-900 dark:text-[#9FC6FC]'
+                      className={`px-2 py-0.5 rounded-lg text-xs font-black tracking-tight ${
+                        diffDays <= 7 && diffDays >= 0
+                          ? 'bg-rose-500 text-white animate-pulse'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
                       }`}
                     >
-                      {dday.label}
+                      {dDayStr}
                     </span>
-
                     <button
-                      type="button"
-                      onClick={() => {
-                        togglePin(ev.id);
-                        triggerHaptic('light');
-                      }}
-                      className={`p-1 rounded-lg cursor-pointer transition-colors ${
+                      onClick={() => togglePin(ev.id)}
+                      className={`p-1.5 rounded-lg transition-colors ${
                         ev.isPinned
-                          ? 'text-amber-500'
-                          : 'text-slate-300 dark:text-slate-600 hover:text-slate-400'
+                          ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/40'
+                          : 'text-slate-400 hover:text-slate-600'
                       }`}
-                      title={ev.isPinned ? 'Pinned to header' : 'Pin to header'}
                     >
                       <Pin size={14} className={ev.isPinned ? 'fill-amber-500' : ''} />
                     </button>
-
                     <button
-                      type="button"
-                      onClick={() => {
-                        deleteEvent(ev.id);
-                        triggerHaptic('warning');
-                      }}
-                      className="p-1 rounded-lg text-slate-300 hover:text-rose-500 cursor-pointer transition-colors"
-                      title="Delete"
+                      onClick={() => deleteEvent(ev.id)}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg transition-colors"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -142,54 +121,65 @@ export function DDayModal({ isOpen, onClose, currentDate }: DDayModalProps) {
           )}
         </div>
 
-        {/* Create New Form */}
-        <form onSubmit={handleAdd} className="border-t border-[#E4EDFC] dark:border-slate-800 pt-3 space-y-2.5">
-          <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Add New Target</p>
-          <input
-            type="text"
-            placeholder="e.g. SAT Exam, Biology Final..."
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#9FC6FC]"
-          />
+        {/* Add New Event Form */}
+        <form onSubmit={handleAdd} className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              Goal / Exam Name
+            </label>
+            <input
+              type="text"
+              required
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="e.g. TOPIK II Exam"
+              className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500/20"
+            />
+          </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Target Date
+              </label>
               <input
                 type="date"
+                required
                 value={newTargetDate}
                 onChange={(e) => setNewTargetDate(e.target.value)}
-                className="w-full text-xs bg-slate-50 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#9FC6FC]"
+                className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500/20"
               />
             </div>
 
-            {/* Color Swatches */}
-            <div className="flex items-center gap-1">
-              {DEFAULT_PASTEL_PALETTE.slice(0, 4).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setNewColor(c)}
-                  style={{ backgroundColor: c }}
-                  className={`w-5 h-5 rounded-full cursor-pointer transition-transform ${
-                    newColor === c ? 'scale-125 ring-2 ring-blue-500' : ''
-                  }`}
-                />
-              ))}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Color Tag
+              </label>
+              <div className="flex gap-1.5 items-center h-9 overflow-x-auto">
+                {DEFAULT_PASTEL_PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setNewColor(c)}
+                    className={`w-5 h-5 rounded-full shrink-0 transition-transform ${
+                      newColor === c ? 'scale-125 ring-2 ring-slate-900 dark:ring-white' : 'opacity-80'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 
           <button
             type="submit"
-            disabled={!newTitle.trim() || !newTargetDate}
-            className="w-full flex items-center justify-center gap-1.5 py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+            className="w-full py-2.5 mt-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
           >
-            <Plus size={14} />
-            <span>Add Countdown</span>
+            <Plus size={16} />
+            Add Milestone
           </button>
         </form>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }

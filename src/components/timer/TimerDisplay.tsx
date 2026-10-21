@@ -6,15 +6,15 @@ interface TimerDisplayProps {
   minutes: string;
   seconds: string;
   mode: TimerMode;
-  pomodoroPhase?: PomodoroPhase;
-  completedCycles?: number;
-  longBreakInterval?: number;
-  progressPercent?: number;
-  subjectName?: string;
-  subjectColor?: string;
-  onSkipPhase?: () => void;
-  onPreviousPhase?: () => void;
-  isOvertime?: boolean;
+  pomodoroPhase?: PomodoroPhase | undefined;
+  completedCycles?: number | undefined;
+  longBreakInterval?: number | undefined;
+  progressPercent?: number | undefined;
+  subjectName?: string | undefined;
+  subjectColor?: string | undefined;
+  onSkipPhase?: (() => void) | undefined;
+  onPreviousPhase?: (() => void) | undefined;
+  isOvertime?: boolean | undefined;
 }
 
 export function TimerDisplay({
@@ -32,138 +32,153 @@ export function TimerDisplay({
   onPreviousPhase,
   isOvertime = false,
 }: TimerDisplayProps) {
-  const isPomodoro = mode === 'pomodoro';
-  const showHours = Number(hours) > 0;
+  const getPhaseDetails = () => {
+    switch (pomodoroPhase) {
+      case 'focus':
+        return {
+          title: 'Deep Focus',
+          icon: <Flame size={18} className="text-orange-500 fill-orange-500 animate-pulse" />,
+          ringColor: 'stroke-orange-500',
+        };
+      case 'shortBreak':
+        return {
+          title: 'Short Break',
+          icon: <Coffee size={18} className="text-teal-500" />,
+          ringColor: 'stroke-teal-500',
+        };
+      case 'longBreak':
+        return {
+          title: 'Long Break',
+          icon: <Sparkles size={18} className="text-indigo-500" />,
+          ringColor: 'stroke-indigo-500',
+        };
+    }
+  };
 
-  const currentCycleStep = (completedCycles % longBreakInterval) + 1;
+  const phase = getPhaseDetails();
+  const radius = 135;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
 
   return (
-    <div className="flex flex-col items-center justify-center py-2 sm:py-4 select-none w-full max-w-sm mx-auto">
-      {/* Subject Badge */}
-      {subjectName && (
-        <div
-          className="px-3 py-1 rounded-full text-xs font-semibold text-slate-900 mb-2.5 border border-black/10 transition-transform active:scale-95 shadow-xs"
-          style={{ backgroundColor: subjectColor }}
-        >
-          {subjectName}
-        </div>
-      )}
+    <div className="relative flex flex-col items-center justify-center p-6 select-none">
+      {/* SVG Ring Tracker */}
+      <div className="relative w-72 h-72 flex items-center justify-center">
+        <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 320 320">
+          {/* Background circle track */}
+          <circle
+            cx="160"
+            cy="160"
+            r={radius}
+            className="stroke-slate-200/80 dark:stroke-slate-800/80 fill-none"
+            strokeWidth="8"
+          />
+          {/* Active Progress Ring */}
+          <circle
+            cx="160"
+            cy="160"
+            r={radius}
+            className={`transition-all duration-300 ease-linear fill-none ${
+              mode === 'stopwatch' ? 'stroke-indigo-500' : phase.ringColor
+            }`}
+            strokeWidth="8"
+            strokeDasharray={circumference}
+            strokeDashoffset={mode === 'stopwatch' ? 0 : strokeDashoffset}
+            strokeLinecap="round"
+          />
+        </svg>
 
-      {/* Pomodoro Mode Phase & Cycle Indicator with Back & Forward Phase Navigation */}
-      {isPomodoro && (
-        <div className="flex flex-col items-center gap-1.5 mb-2.5">
-          <div className="flex items-center gap-2">
-            {/* Previous Cycle / Phase Button */}
-            {onPreviousPhase && (
-              <button
-                type="button"
-                onClick={onPreviousPhase}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl transition-colors cursor-pointer hover:bg-[#E4EDFC]/60 dark:hover:bg-slate-800"
-                title="Regresar al ciclo / fase anterior"
-              >
-                <SkipBack size={15} />
-              </button>
-            )}
-
-            {isOvertime ? (
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-300 dark:border-amber-700 animate-pulse">
-                <span>⚡ Flowtime Overtime</span>
-              </span>
-            ) : (
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                pomodoroPhase === 'focus'
-                  ? 'bg-[#E4EDFC] text-blue-900 dark:bg-blue-950/80 dark:text-blue-200 border border-[#C2D8FC] dark:border-blue-800'
-                  : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800'
-              }`}
-            >)
-              {pomodoroPhase === 'focus' ? (
-                <>
-                  <Flame size={13} className="text-blue-600 dark:text-blue-400" />
-                  <span>Focus Interval</span>
-                </>
-              ) : pomodoroPhase === 'shortBreak' ? (
-                <>
-                  <Coffee size={13} className="text-emerald-600 dark:text-emerald-400" />
-                  <span>Short Break</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles size={13} className="text-emerald-600 dark:text-emerald-400" />
-                  <span>Long Break</span>
-                </>
-              )}
-            </span>)}
-
-            {/* Next Phase Button */}
-            {onSkipPhase && (
-              <button
-                type="button"
-                onClick={onSkipPhase}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl transition-colors cursor-pointer hover:bg-[#E4EDFC]/60 dark:hover:bg-slate-800"
-                title="Avanzar a la siguiente fase"
-              >
-                <SkipForward size={15} />
-              </button>
-            )}
-          </div>
-
-          {/* Pomodoro Cycle Dots (e.g. 4 dots) */}
-          <div className="flex items-center gap-1.5 pt-0.5">
-            {Array.from({ length: longBreakInterval }).map((_, idx) => (
-              <span
-                key={idx}
-                className={`w-2.5 h-2.5 rounded-full transition-colors ${
-                  idx < currentCycleStep - 1
-                    ? 'bg-blue-600 dark:bg-blue-400'
-                    : idx === currentCycleStep - 1 && pomodoroPhase === 'focus'
-                    ? 'bg-[#9FC6FC] dark:bg-blue-500 scale-125 ring-2 ring-blue-400/40'
-                    : 'bg-slate-200 dark:bg-slate-700'
-                }`}
-                title={`Interval ${idx + 1}`}
-              />
-            ))}
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1 font-mono">
-              Cycle {Math.floor(completedCycles / longBreakInterval) + 1}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Main Clock Face with Circular / Linear Progress */}
-      <div className="relative flex flex-col items-center w-full">
-        <div className={`flex items-center justify-center text-4xl sm:text-5xl md:text-6xl font-extrabold font-mono tracking-tight bg-white dark:bg-slate-800/90 px-6 py-3 sm:px-7 sm:py-4 rounded-3xl border shadow-sm w-full max-w-[280px] sm:max-w-[320px] transition-colors ${
-          isOvertime
-            ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700'
-            : 'text-slate-900 dark:text-slate-50 border-[#C2D8FC]/80 dark:border-slate-700'
-        }`}>
-          {isOvertime && <span className="text-amber-500 mr-0.5">+</span>}
-          {showHours && (
-            <>
-              <span>{hours}</span>
-              <span className="text-slate-300 dark:text-slate-600 mx-0.5 sm:mx-1">:</span>
-            </>
+        {/* Center Clock Face */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+          {/* Phase Badge / Tag */}
+          {mode === 'pomodoro' ? (
+            <div className="flex items-center gap-1.5 px-3 py-1 mb-2 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-300 shadow-xs">
+              {phase.icon}
+              <span>{phase.title}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1 mb-2 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-medium text-indigo-600 dark:text-indigo-400 shadow-xs">
+              <Sparkles size={14} />
+              <span>Stopwatch</span>
+            </div>
           )}
-          <span>{minutes}</span>
-          <span className="text-slate-300 dark:text-slate-600 mx-0.5 sm:mx-1">:</span>
-          <span>{seconds}</span>
-        </div>
 
-        {/* Pomodoro Progress Bar */}
-        {isPomodoro && (
-          <div className="w-full max-w-[280px] sm:max-w-[320px] mt-2.5 px-1">
-            <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-[#9FC6FC] dark:bg-blue-400 rounded-full transition-colors duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
+          {/* Overtime Banner Indicator */}
+          {isOvertime && (
+            <div className="animate-bounce flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold tracking-wider uppercase mb-1">
+              <span>+ Overtime Flow</span>
             </div>
-            <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-mono">
-              <span>{Math.round(progressPercent)}% elapsed</span>
-              <span>{pomodoroPhase === 'focus' ? 'Study Block' : 'Rest Block'}</span>
-            </div>
+          )}
+
+          {/* Numbers Display with Monospace Layout */}
+          <div className="flex items-baseline font-mono tracking-tight text-slate-900 dark:text-white">
+            {hours !== '00' && (
+              <>
+                <span className="text-4xl md:text-5xl font-light">{hours}</span>
+                <span className="text-xl mx-0.5 opacity-40">:</span>
+              </>
+            )}
+            <span className="text-5xl md:text-6xl font-light">{minutes}</span>
+            <span className="text-2xl mx-0.5 opacity-40">:</span>
+            <span className="text-5xl md:text-6xl font-light">{seconds}</span>
           </div>
-        )}
+
+          {/* Active Subject Pill Indicator */}
+          {subjectName && (
+            <div className="flex items-center gap-1.5 mt-3 max-w-[200px]">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs"
+                style={{ backgroundColor: subjectColor }}
+              />
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                {subjectName}
+              </span>
+            </div>
+          )}
+
+          {/* Pomodoro Cycles Count & Phase Skip Controls */}
+          {mode === 'pomodoro' && (
+            <div className="mt-3 flex items-center gap-2">
+              {/* Back to Previous Phase Button */}
+              {onPreviousPhase && (
+                <button
+                  type="button"
+                  onClick={onPreviousPhase}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Return to previous Pomodoro phase"
+                >
+                  <SkipBack size={13} />
+                </button>
+              )}
+
+              {/* Cycle Dots */}
+              <div className="flex items-center gap-1">
+                {Array.from({ length: longBreakInterval }).map((_, idx) => (
+                  <span
+                    key={idx}
+                    className={`w-1.5 h-1.5 rounded-full transition-all ${
+                      idx < completedCycles % longBreakInterval
+                        ? 'bg-orange-500 scale-125'
+                        : 'bg-slate-300 dark:bg-slate-700'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* Forward to Next Phase Button */}
+              {onSkipPhase && (
+                <button
+                  type="button"
+                  onClick={onSkipPhase}
+                  className="p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Skip to next Pomodoro phase"
+                >
+                  <SkipForward size={13} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

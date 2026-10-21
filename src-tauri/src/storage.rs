@@ -239,7 +239,13 @@ mod tests {
                  total_minutes = excluded.total_minutes,
                  data_json = excluded.data_json,
                  updated_at = excluded.updated_at;",
-            params![date, &sheet.main_goal, sheet.total_minutes_studied, &json1, 1000i64],
+            params![
+                date,
+                &sheet.main_goal,
+                sheet.total_minutes_studied,
+                &json1,
+                1000i64
+            ],
         )
         .unwrap();
 
@@ -256,15 +262,25 @@ mod tests {
                  total_minutes = excluded.total_minutes,
                  data_json = excluded.data_json,
                  updated_at = excluded.updated_at;",
-            params![date, &sheet.main_goal, sheet.total_minutes_studied, &json2, 2000i64],
+            params![
+                date,
+                &sheet.main_goal,
+                sheet.total_minutes_studied,
+                &json2,
+                2000i64
+            ],
         )
         .unwrap();
 
         let mut stmt = conn
-            .prepare("SELECT main_goal, total_minutes, data_json FROM daily_sheets WHERE date = ?1;")
+            .prepare(
+                "SELECT main_goal, total_minutes, data_json FROM daily_sheets WHERE date = ?1;",
+            )
             .unwrap();
         let (saved_goal, saved_mins, saved_json): (String, u32, String) = stmt
-            .query_row(params![date], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .query_row(params![date], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })
             .unwrap();
 
         assert_eq!(saved_goal, "Master Rust, Algorithms & Systems");
@@ -290,14 +306,26 @@ mod tests {
         .unwrap();
 
         let title: String = conn
-            .query_row("SELECT title FROM dday_events WHERE id = ?1;", params!["dday_exam"], |r| r.get(0))
+            .query_row(
+                "SELECT title FROM dday_events WHERE id = ?1;",
+                params!["dday_exam"],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(title, "SAT Exam");
 
         // D-Day Delete
-        conn.execute("DELETE FROM dday_events WHERE id = ?1;", params!["dday_exam"]).unwrap();
+        conn.execute(
+            "DELETE FROM dday_events WHERE id = ?1;",
+            params!["dday_exam"],
+        )
+        .unwrap();
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM dday_events WHERE id = ?1;", params!["dday_exam"], |r| r.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM dday_events WHERE id = ?1;",
+                params!["dday_exam"],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(count, 0);
 
@@ -314,7 +342,11 @@ mod tests {
         .unwrap();
 
         let read_payload: String = conn
-            .query_row("SELECT payload_json FROM gamification_profile WHERE id = 1;", [], |r| r.get(0))
+            .query_row(
+                "SELECT payload_json FROM gamification_profile WHERE id = 1;",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(read_payload, profile_payload);
     }

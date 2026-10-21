@@ -81,11 +81,11 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
 
     switch (timerState.pomodoroPhase) {
       case 'focus':
-        return timerConfig.pomodoroWorkMinutes * 60 * 1000;
+        return (timerConfig.pomodoroWorkMinutes ?? 25) * 60 * 1000;
       case 'shortBreak':
-        return timerConfig.pomodoroShortBreakMinutes * 60 * 1000;
+        return (timerConfig.pomodoroShortBreakMinutes ?? 5) * 60 * 1000;
       case 'longBreak':
-        return timerConfig.pomodoroLongBreakMinutes * 60 * 1000;
+        return (timerConfig.pomodoroLongBreakMinutes ?? 15) * 60 * 1000;
       default:
         return 25 * 60 * 1000;
     }
@@ -200,7 +200,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       // Check daily quest progress
       useGamificationStore.getState().advanceQuest('quest_pomodoro', 1);
 
-      if (completedCycles % timerConfig.longBreakInterval === 0) {
+      if (completedCycles % (timerConfig.longBreakInterval ?? 4) === 0) {
         nextPhase = 'longBreak';
       } else {
         nextPhase = 'shortBreak';
@@ -264,7 +264,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
       if (cycles > 0) cycles -= 1;
     } else {
       if (cycles > 0) {
-        if (cycles % timerConfig.longBreakInterval === 0) {
+        if (cycles % (timerConfig.longBreakInterval ?? 4) === 0) {
           prevPhase = 'longBreak';
         } else {
           prevPhase = 'shortBreak';
