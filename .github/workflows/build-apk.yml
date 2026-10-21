@@ -88,6 +88,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      - name: Install Linux system dependencies (Tauri)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            patchelf
+
       - name: Generate TypeScript bindings
         run: pnpm types:gen
 
@@ -135,10 +148,11 @@ jobs:
 
       - name: Upload Debug Smoke APK
         if: success()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: kplanner-smoke-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
           retention-days: 14
 
   # ============================================================================
@@ -210,6 +224,19 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+
+      - name: Install Linux system dependencies (Tauri)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            patchelf
 
       - name: Build Web Frontend (Optimized Production)
         run: pnpm build
@@ -297,7 +324,7 @@ jobs:
           python3 .github/scripts/audit-apk.py
 
       - name: Upload Release APKs (arm64-v8a & armeabi-v7a)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: kplanner-release-apks
           path: dist-artifacts/apk/*.apk
@@ -305,7 +332,7 @@ jobs:
           retention-days: 30
 
       - name: Upload Release AAB (Google Play Store Bundle)
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: kplanner-release-aab
           path: dist-artifacts/bundle/*.aab
@@ -314,7 +341,7 @@ jobs:
 
       - name: Upload Release Build Logs
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: tauri-release-logs
           path: |
