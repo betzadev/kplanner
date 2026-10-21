@@ -84,6 +84,7 @@ jobs:
         with:
           toolchain: 1.99.1
           targets: ${{ env.RUST_TARGET }}
+          components: rustfmt, clippy
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
@@ -135,9 +136,10 @@ jobs:
             pnpm tauri android init --ci
           fi
 
-      - name: Write local.properties
+      - name: Write local.properties and set gradlew permissions
         run: |
           printf "sdk.dir=%s\nndk.dir=%s\n" "$ANDROID_HOME" "$NDK_HOME" > src-tauri/gen/android/local.properties
+          [ -f "src-tauri/gen/android/gradlew" ] && chmod +x src-tauri/gen/android/gradlew || true
 
       - name: Tauri Android Build Debug APK (Smoke Test)
         env:
@@ -152,6 +154,15 @@ jobs:
         with:
           name: kplanner-smoke-debug-apk
           path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Debug Smoke Build Log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: tauri-smoke-log
+          path: tauri-smoke.log
           if-no-files-found: warn
           retention-days: 14
 
