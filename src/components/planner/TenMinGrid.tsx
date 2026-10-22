@@ -118,6 +118,7 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
     if (touchMode !== 'paint') return;
 
     const touch = e.touches[0];
+    if (!touch) return;
     const elem = document.elementFromPoint(touch.clientX, touch.clientY);
     const cellElem = elem?.closest('[data-hour]') as HTMLElement | null;
 
@@ -143,6 +144,7 @@ export function TenMinGrid({ date, startHour: defaultStartHour = 6 }: TenMinGrid
     }
 
     const touch = e.touches[0];
+    if (!touch) return;
     const elem = document.elementFromPoint(touch.clientX, touch.clientY);
     const cellElem = elem?.closest('[data-hour]') as HTMLElement | null;
 
@@ -370,9 +372,9 @@ interface ConnectedCellProps {
   isToday: boolean;
   isPlanMode: boolean;
   useCellState: (hour: HourValue, tenMinIndex: TenMinuteIndex) => {
-    subjectId?: EntityId | null;
-    plannedSubjectId?: EntityId | null;
-    fillRatio?: number;
+    subjectId?: EntityId | null | undefined;
+    plannedSubjectId?: EntityId | null | undefined;
+    fillRatio?: number | null | undefined;
   } | undefined;
   onMouseDown: (hour: HourValue, tenMinIndex: TenMinuteIndex, currentSubjectId: EntityId | null | undefined) => void;
   onMouseEnter: (hour: HourValue, tenMinIndex: TenMinuteIndex) => void;

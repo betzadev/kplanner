@@ -16,21 +16,27 @@ tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
 tauri = { version = "2.0.0", features = [] }
-tauri-plugin-opener = "2.0.0"
-tauri-plugin-notification = "2.0.0"
-tauri-plugin-haptics = "2.0.0"
+tauri-plugin-opener = "2.5.5"
+tauri-plugin-notification = "2.6.0"
+tauri-plugin-haptics = "2.3.3"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.38", features = ["macros", "rt-multi-thread", "sync"] }
-libsql = { version = "0.6", default-features = false, features = ["replication", "tls"] }
+libsql = { version = "0.9.30", default-features = false, features = ["replication", "tls"] }
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+validator = { version = "0.21.0", features = ["derive"] }
+specta-typescript = "0.0.12"
+
 
 # Aggressive binary size optimization for release / mobile builds
 [profile.release]
-panic = "abort"
-codegen-units = 1
-lto = true
 opt-level = "z"
-strip = true
+lto = true
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
 
 [dev-dependencies]
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.40.2" }

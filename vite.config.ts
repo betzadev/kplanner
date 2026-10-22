@@ -28,6 +28,7 @@ export default defineConfig(() => ({
   },
 
   build: {
+    target: ["es2022", "chrome110"],
     sourcemap: false,
     minify: true,
     cssMinify: true,

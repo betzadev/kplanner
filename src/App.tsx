@@ -101,7 +101,7 @@ export default function App() {
     tasks,
     timeGrid: {},
     bottomMemos,
-    memoLabels: undefined,
+    memoLabels: null,
     completionStamp: null,
   };
 

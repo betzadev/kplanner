@@ -1,7 +1,10 @@
-mod commands;
-mod models;
+pub mod commands;
+pub mod gamification;
+pub mod models;
+pub mod slots;
 mod storage;
 mod turso;
+pub mod validation;
 
 use commands::*;
 use std::sync::Arc;
@@ -9,6 +12,20 @@ use storage::StorageManager;
 use tauri::Manager;
 use tokio::sync::Mutex;
 use turso::TursoManager;
+
+pub fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new()
+        .commands(tauri_specta::collect_commands![
+            compute_streak,
+            compute_xp_gain,
+            apply_streak_freeze,
+            build_day_slots,
+            validate_daily_sheet,
+            compute_dday_remaining,
+        ])
+        .typ::<crate::models::SubjectItem>()
+        .typ::<crate::models::TimerConfig>()
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -62,6 +79,12 @@ pub fn run() {
             sync_turso_database,
             get_gamification_profile,
             save_gamification_profile,
+            compute_streak,
+            compute_xp_gain,
+            apply_streak_freeze,
+            build_day_slots,
+            validate_daily_sheet,
+            compute_dday_remaining,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

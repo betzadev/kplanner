@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { usePlannerStore } from './usePlannerStore';
 import { toDateString } from '../utils/timeSlotMapper';
-import { DailyQuest } from '../types';
+import { DailyQuest, StreakResult, GamificationProfile } from '../types';
+import { commands } from '../types/bindings';
 import { tauriApi } from '../services/tauriApi';
 
 export interface StreakMilestone {
@@ -128,6 +129,7 @@ export interface GamificationState {
   unlockedChimes: string[];
   dailyQuests: DailyQuest[];
   lastQuestDate: string;
+  cachedStreak?: StreakResult | null;
 }
 
 export interface GamificationActions {
@@ -457,78 +459,43 @@ export const useGamificationStore = create<GamificationStore>()(
 
       calculateStreak: () => {
         const sheets = usePlannerStore.getState().dailySheets || {};
-        const today = new Date();
-        const todayStr = toDateString(today);
+        const todayStr = toDateString(new Date());
 
-        const checkDateHasStudy = (dStr: string) => {
-          const sheet = sheets[dStr];
-          if (!sheet) return false;
-          if (sheet.totalMinutesStudied && sheet.totalMinutesStudied > 0) return true;
-          if (sheet.tasks && sheet.tasks.some((t) => t.isCompleted)) return true;
-          if (sheet.timeGrid) {
-            return Object.values(sheet.timeGrid).some(
-              (c) => c.subjectId !== null && (c.fillRatio ?? 1.0) > 0
-            );
-          }
-          return false;
+        const profile: GamificationProfile = {
+          xp: get().xp,
+          gems: get().gems,
+          streakFreezes: get().streakFreezes,
+          dailyGoalMinutes: get().dailyGoalMinutes,
+          claimedMilestones: get().claimedMilestones,
+          claimedWeeklyChests: get().claimedWeeklyChests,
+          unlockedThemes: get().unlockedThemes,
+          unlockedStamps: get().unlockedStamps,
+          unlockedChimes: get().unlockedChimes,
         };
 
-        const todaySheet = sheets[todayStr];
-        let todayMinutes = 0;
-        if (todaySheet) {
-          if (todaySheet.totalMinutesStudied) {
-            todayMinutes = todaySheet.totalMinutesStudied;
-          } else if (todaySheet.timeGrid) {
-            Object.values(todaySheet.timeGrid).forEach((c) => {
-              if (c.subjectId) todayMinutes += Math.round(10 * (c.fillRatio ?? 1.0));
-            });
-          }
+        if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+          void (async () => {
+            const res = await commands.computeStreak(profile, sheets, todayStr);
+            if (res.status === 'error') {
+              console.error(res.error);
+              return;
+            }
+            const data = res.data;
+            const cur = get().cachedStreak;
+            if (!cur || cur.streakCount !== data.streakCount || cur.hasStudiedToday !== data.hasStudiedToday) {
+              set({ cachedStreak: data });
+            }
+          })();
         }
 
-        const hasStudiedToday = checkDateHasStudy(todayStr);
-
-        // Calculate consecutive streak
-        let streak = 0;
-        const currentCheck = new Date(today);
-
-        if (hasStudiedToday) {
-          streak = 1;
-          currentCheck.setDate(currentCheck.getDate() - 1);
-        } else {
-          currentCheck.setDate(currentCheck.getDate() - 1);
-        }
-
-        for (let safety = 0; safety < 365; safety++) {
-          const dStr = toDateString(currentCheck);
-          if (checkDateHasStudy(dStr)) {
-            streak++;
-            currentCheck.setDate(currentCheck.getDate() - 1);
-          } else {
-            break;
-          }
-        }
-
-        const weekDays = [];
-        const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(today);
-          d.setDate(d.getDate() - i);
-          const dStr = toDateString(d);
-
-          weekDays.push({
-            date: dStr,
-            dayLabel: dayLabels[d.getDay()],
-            studied: checkDateHasStudy(dStr),
-            isToday: dStr === todayStr,
-          });
-        }
+        const cached = get().cachedStreak;
+        if (cached) return cached;
 
         return {
-          streakCount: streak,
-          hasStudiedToday,
-          todayMinutes,
-          weekDays,
+          streakCount: 0,
+          hasStudiedToday: false,
+          todayMinutes: 0,
+          weekDays: [],
         };
       },
     }),

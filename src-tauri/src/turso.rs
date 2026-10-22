@@ -229,7 +229,10 @@ impl TursoManager {
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
         let mut rows = self
             .conn
-            .query("SELECT payload_json FROM gamification_profile WHERE id = 1;", ())
+            .query(
+                "SELECT payload_json FROM gamification_profile WHERE id = 1;",
+                (),
+            )
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 

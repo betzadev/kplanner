@@ -24,7 +24,8 @@ export function SubjectModal({
   mode,
 }: SubjectModalProps) {
   const [name, setName] = useState('');
-  const [color, setColor] = useState<HexColor>(DEFAULT_PASTEL_PALETTE[0]);
+  // SAFETY: DEFAULT_PASTEL_PALETTE has 8 hardcoded colors
+  const [color, setColor] = useState<HexColor>(DEFAULT_PASTEL_PALETTE[0]!);
   const [selectedThemeId, setSelectedThemeId] = useState<string>('dreamy_pastel');
 
   const unlockedThemes = useGamificationStore((state) => state.unlockedThemes) ?? ['dreamy_pastel'];
@@ -36,7 +37,8 @@ export function SubjectModal({
         setColor(subjectToEdit.color);
       } else {
         setName('');
-        setColor(DEFAULT_PASTEL_PALETTE[0]);
+        // SAFETY: DEFAULT_PASTEL_PALETTE has 8 hardcoded colors
+        setColor(DEFAULT_PASTEL_PALETTE[0]!);
       }
     }
   }, [isOpen, mode, subjectToEdit]);
@@ -52,7 +54,8 @@ export function SubjectModal({
 
   if (!isOpen || typeof document === "undefined") return null;
 
-  const currentTheme = UNLOCKABLE_THEMES.find((t) => t.id === selectedThemeId) || UNLOCKABLE_THEMES[0];
+  // SAFETY: UNLOCKABLE_THEMES has hardcoded default themes
+  const currentTheme = UNLOCKABLE_THEMES.find((t) => t.id === selectedThemeId) || UNLOCKABLE_THEMES[0]!;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

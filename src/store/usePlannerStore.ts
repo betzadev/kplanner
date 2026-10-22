@@ -89,7 +89,7 @@ export function createEmptyDailySheet(date: DateString): DailySheet {
     tasks: [],
     timeGrid,
     bottomMemos: ['', '', '', '', '', ''],
-    memoLabels: undefined,
+    memoLabels: null,
     completionStamp: null,
   };
 }
@@ -214,6 +214,9 @@ export const usePlannerStore = create<PlannerStore>()(
           title: title.trim(),
           isCompleted: false,
           order: sheet.tasks.length,
+          isRolledOver: null,
+          originalDate: null,
+          originalTaskId: null,
         };
 
         set((prev) => {
@@ -264,14 +267,16 @@ export const usePlannerStore = create<PlannerStore>()(
           scheduleSaveToRust(updated);
 
           const newDailySheets = { ...prev.dailySheets, [date]: updated };
-          if (targetTask?.originalTaskId && targetTask?.originalDate && newDailySheets[targetTask.originalDate]) {
+          if (targetTask?.originalTaskId && targetTask?.originalDate) {
             const origSheet = newDailySheets[targetTask.originalDate];
-            const origTasks = origSheet.tasks.map((ot) =>
-              ot.id === targetTask.originalTaskId ? { ...ot, isCompleted: !targetTask.isCompleted } : ot
-            );
-            const updatedOrigSheet = { ...origSheet, tasks: origTasks };
-            newDailySheets[targetTask.originalDate] = updatedOrigSheet;
-            scheduleSaveToRust(updatedOrigSheet);
+            if (origSheet) {
+              const origTasks = origSheet.tasks.map((ot) =>
+                ot.id === targetTask.originalTaskId ? { ...ot, isCompleted: !targetTask.isCompleted } : ot
+              );
+              const updatedOrigSheet = { ...origSheet, tasks: origTasks };
+              newDailySheets[targetTask.originalDate] = updatedOrigSheet;
+              scheduleSaveToRust(updatedOrigSheet);
+            }
           }
 
           return {
@@ -381,7 +386,7 @@ export const usePlannerStore = create<PlannerStore>()(
               : subjectId === null
               ? 0.0
               : fillRatio,
-            isVerifiedTimer: isPlanMode ? currentCell?.isVerifiedTimer : isVerifiedTimer,
+            isVerifiedTimer: isPlanMode ? (currentCell?.isVerifiedTimer ?? null) : (isVerifiedTimer ?? null),
           };
 
           const newTimeGrid = {
@@ -441,7 +446,7 @@ export const usePlannerStore = create<PlannerStore>()(
                 : subjectId === null
                 ? 0.0
                 : 1.0,
-              isVerifiedTimer: isPlanMode ? currentCell?.isVerifiedTimer : isVerifiedTimer,
+              isVerifiedTimer: isPlanMode ? (currentCell?.isVerifiedTimer ?? null) : (isVerifiedTimer ?? null),
             };
           });
 

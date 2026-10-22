@@ -174,3 +174,58 @@ pub async fn save_gamification_profile(
 
     Ok(())
 }
+
+use crate::gamification::{
+    apply_streak_freeze as rust_apply_streak_freeze, compute_streak as rust_compute_streak,
+    compute_xp_gain as rust_compute_xp_gain, StreakResult,
+};
+use crate::models::GamificationProfile;
+use crate::slots::{build_day_slots as rust_build_day_slots, Slot};
+use crate::validation::{
+    compute_dday_remaining as rust_compute_dday_remaining, validate_sheet as rust_validate_sheet,
+    DDayStatus,
+};
+use std::collections::HashMap;
+
+#[tauri::command]
+#[specta::specta]
+pub fn compute_streak(
+    profile: GamificationProfile,
+    sheets: HashMap<String, DailySheet>,
+    today: String,
+) -> Result<StreakResult, String> {
+    Ok(rust_compute_streak(&profile, &sheets, &today))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn compute_xp_gain(action: String, multiplier: Option<f32>) -> Result<u32, String> {
+    Ok(rust_compute_xp_gain(&action, multiplier))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn apply_streak_freeze(
+    mut profile: GamificationProfile,
+    date: String,
+) -> Result<GamificationProfile, String> {
+    rust_apply_streak_freeze(&mut profile, &date).map_err(|e| e.message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn build_day_slots(date: String) -> Result<Vec<Slot>, String> {
+    Ok(rust_build_day_slots(&date))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn validate_daily_sheet(sheet: DailySheet) -> Result<(), String> {
+    rust_validate_sheet(&sheet).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn compute_dday_remaining(event: DDayEvent, now: String) -> Result<DDayStatus, String> {
+    rust_compute_dday_remaining(&event, &now)
+}
