@@ -5,6 +5,7 @@ use std::path::PathBuf;
 pub struct TursoManager {
     db: Database,
     conn: Connection,
+    is_remote: bool,
 }
 
 impl TursoManager {
@@ -15,20 +16,22 @@ impl TursoManager {
         turso_url: Option<String>,
         auth_token: Option<String>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let db = match (turso_url, auth_token) {
-            (Some(url), Some(token)) if !url.is_empty() && !token.is_empty() => {
+        let (db, is_remote) = match (turso_url, auth_token) {
+            (Some(url), Some(token)) if !url.trim().is_empty() && !token.trim().is_empty() => {
                 // Modo réplica remota nativa con sincronización en la nube (Turso)
-                Builder::new_remote_replica(local_db_path, url, token)
+                let database = Builder::new_remote_replica(local_db_path, url, token)
                     .build()
                     .await
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+                (database, true)
             }
             _ => {
                 // Modo local SQLite puro (0ms de latencia, sin conexión requerida)
-                Builder::new_local(local_db_path)
+                let database = Builder::new_local(local_db_path)
                     .build()
                     .await
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+                (database, false)
             }
         };
 
@@ -76,6 +79,7 @@ impl TursoManager {
         )
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS gamification_profile (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -87,17 +91,28 @@ impl TursoManager {
         .await
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-        Ok(Self { db, conn })
+        Ok(Self { db, conn, is_remote })
     }
 
-    /// Sincronización nativa con Turso: envía mutaciones locales y descarga las nuevas
+    /// Sincronización nativa con Turso: envía mutaciones locales y descarga las nuevas.
+    /// Si la base es local pura, retorna Ok(0) sin error.
     pub async fn sync(&self) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.is_remote {
+            // La base de datos es local pura, todos los cambios están persistidos en disco.
+            return Ok(0);
+        }
+
         let replicated = self
             .db
             .sync()
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         Ok(replicated.frames_synced())
+    }
+
+    #[allow(dead_code)]
+    pub fn is_remote(&self) -> bool {
+        self.is_remote
     }
 
     #[allow(dead_code)]
@@ -201,6 +216,7 @@ impl TursoManager {
         }
         Ok(())
     }
+
     pub async fn upsert_gamification_profile(
         &self,
         payload_json: &str,

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { usePlannerStore } from './usePlannerStore';
 import { toDateString } from '../utils/timeSlotMapper';
-import { DailyQuest, StreakResult, GamificationProfile } from '../types';
+import { DailyQuest, StreakResult, GamificationProfile, UNLOCKABLE_THEMES } from '../types';
 import { commands } from '../types/bindings';
 import { tauriApi } from '../services/tauriApi';
 
@@ -65,7 +65,7 @@ export const AVAILABLE_STAMPS: Array<{ id: string; name: string; priceGems: numb
 ];
 
 export const AVAILABLE_CHIMES: Array<{ id: string; name: string; priceGems: number; description: string }> = [
-  { id: 'default', name: 'Soft Chirp (Default)', priceGems: 0, description: 'Gentle sine chime' },
+  { id: 'default', name: 'Soft Chirp (Default)', priceGems: 0, description: 'Gentle sine chirp' },
   { id: 'marimba', name: 'Warm Marimba', priceGems: 50, description: 'Natural wooden percussion' },
   { id: 'tibetan', name: 'Tibetan Bowl', priceGems: 100, description: 'Resonant meditation bell' },
   { id: 'retro', name: 'Retro 8-Bit', priceGems: 100, description: 'Chiptune victory arpeggio' },
@@ -116,6 +116,8 @@ export function getCurrentWeekMonday(refDate: Date = new Date()): string {
   d.setDate(d.getDate() + diff);
   return toDateString(d);
 }
+
+const ALL_FREE_THEMES = UNLOCKABLE_THEMES.filter((t) => t.priceGems === 0).map((t) => t.id);
 
 export interface GamificationState {
   xp: number;
@@ -255,7 +257,7 @@ export const useGamificationStore = create<GamificationStore>()(
       dailyGoalMinutes: 30,
       claimedMilestones: [],
       claimedWeeklyChests: [],
-      unlockedThemes: ['dreamy_pastel'],
+      unlockedThemes: ALL_FREE_THEMES,
       unlockedStamps: ['100% Focus'],
       unlockedChimes: ['default'],
       dailyQuests: createDefaultQuests(),
@@ -342,45 +344,81 @@ export const useGamificationStore = create<GamificationStore>()(
       buyStreakFreeze: () => {
         const cost = 80;
         if ((get().gems || 0) < cost) return false;
-        set((state) => ({
-          gems: (state.gems || 0) - cost,
-          streakFreezes: (state.streakFreezes || 0) + 1,
-        }));
-        scheduleSaveGamificationToRust(get());
-        return true;
+        const prevGems = get().gems || 0;
+        const prevFreezes = get().streakFreezes || 0;
+        try {
+          set((state) => ({
+            gems: (state.gems || 0) - cost,
+            streakFreezes: (state.streakFreezes || 0) + 1,
+          }));
+          scheduleSaveGamificationToRust(get());
+          return true;
+        } catch {
+          set({ gems: prevGems, streakFreezes: prevFreezes });
+          return false;
+        }
       },
 
       buyTheme: (themeId: string, cost: number) => {
-        const themes = get().unlockedThemes || ['dreamy_pastel'];
+        const themes = get().unlockedThemes || ALL_FREE_THEMES;
         if ((get().gems || 0) < cost || themes.includes(themeId)) return false;
-        set((state) => ({
-          gems: (state.gems || 0) - cost,
-          unlockedThemes: [...(state.unlockedThemes || ['dreamy_pastel']), themeId],
-        }));
-        scheduleSaveGamificationToRust(get());
-        return true;
+        const prevGems = get().gems || 0;
+        const prevThemes = [...themes];
+        try {
+          const newThemes = Array.from(new Set([...themes, themeId]));
+          set({
+            gems: prevGems - cost,
+            unlockedThemes: newThemes,
+          });
+          scheduleSaveGamificationToRust(get());
+          return true;
+        } catch {
+          set({ gems: prevGems, unlockedThemes: prevThemes });
+          return false;
+        }
       },
 
       buyStamp: (stampId: string, cost: number) => {
         const stamps = get().unlockedStamps || ['100% Focus'];
         if ((get().gems || 0) < cost || stamps.includes(stampId)) return false;
-        set((state) => ({
-          gems: (state.gems || 0) - cost,
-          unlockedStamps: [...(state.unlockedStamps || ['100% Focus']), stampId],
-        }));
-        scheduleSaveGamificationToRust(get());
-        return true;
+        const prevGems = get().gems || 0;
+        const prevStamps = [...stamps];
+        try {
+          const newStamps = Array.from(new Set([...stamps, stampId]));
+          set({
+            gems: prevGems - cost,
+            unlockedStamps: newStamps,
+          });
+          scheduleSaveGamificationToRust(get());
+          return true;
+        } catch {
+          set({ gems: prevGems, unlockedStamps: prevStamps });
+          return false;
+        }
       },
 
       buyChime: (chimeId: string, cost: number) => {
         const chimes = get().unlockedChimes || ['default'];
         if ((get().gems || 0) < cost || chimes.includes(chimeId)) return false;
-        set((state) => ({
-          gems: (state.gems || 0) - cost,
-          unlockedChimes: [...(state.unlockedChimes || ['default']), chimeId],
-        }));
-        scheduleSaveGamificationToRust(get());
-        return true;
+        const prevGems = get().gems || 0;
+        const prevChimes = [...chimes];
+
+        try {
+          const newChimes = Array.from(new Set([...chimes, chimeId]));
+          set({
+            gems: prevGems - cost,
+            unlockedChimes: newChimes,
+          });
+          scheduleSaveGamificationToRust(get());
+          return true;
+        } catch (err) {
+          console.error('Failed to save purchased chime, rolling back:', err);
+          set({
+            gems: prevGems,
+            unlockedChimes: prevChimes,
+          });
+          return false;
+        }
       },
 
       setDailyGoalMinutes: (mins: number) => {
@@ -400,9 +438,21 @@ export const useGamificationStore = create<GamificationStore>()(
               dailyGoalMinutes: typeof parsed.dailyGoalMinutes === 'number' ? parsed.dailyGoalMinutes : current.dailyGoalMinutes,
               claimedMilestones: Array.isArray(parsed.claimedMilestones) ? parsed.claimedMilestones : current.claimedMilestones,
               claimedWeeklyChests: Array.isArray(parsed.claimedWeeklyChests) ? parsed.claimedWeeklyChests : current.claimedWeeklyChests,
-              unlockedThemes: Array.isArray(parsed.unlockedThemes) && parsed.unlockedThemes.length > 0 ? parsed.unlockedThemes : current.unlockedThemes,
-              unlockedStamps: Array.isArray(parsed.unlockedStamps) && parsed.unlockedStamps.length > 0 ? parsed.unlockedStamps : current.unlockedStamps,
-              unlockedChimes: Array.isArray(parsed.unlockedChimes) && parsed.unlockedChimes.length > 0 ? parsed.unlockedChimes : current.unlockedChimes,
+              unlockedThemes: Array.from(new Set([
+                ...ALL_FREE_THEMES,
+                ...(Array.isArray(current.unlockedThemes) ? current.unlockedThemes : []),
+                ...(Array.isArray(parsed.unlockedThemes) ? parsed.unlockedThemes : []),
+              ])),
+              unlockedStamps: Array.from(new Set([
+                '100% Focus',
+                ...(Array.isArray(current.unlockedStamps) ? current.unlockedStamps : []),
+                ...(Array.isArray(parsed.unlockedStamps) ? parsed.unlockedStamps : []),
+              ])),
+              unlockedChimes: Array.from(new Set([
+                'default',
+                ...(Array.isArray(current.unlockedChimes) ? current.unlockedChimes : []),
+                ...(Array.isArray(parsed.unlockedChimes) ? parsed.unlockedChimes : []),
+              ])),
               dailyQuests: Array.isArray(parsed.dailyQuests) && parsed.dailyQuests.length > 0 ? parsed.dailyQuests : current.dailyQuests,
               lastQuestDate: typeof parsed.lastQuestDate === 'string' ? parsed.lastQuestDate : current.lastQuestDate,
             }));
@@ -511,9 +561,18 @@ export const useGamificationStore = create<GamificationStore>()(
           dailyGoalMinutes: typeof p.dailyGoalMinutes === 'number' ? p.dailyGoalMinutes : currentState.dailyGoalMinutes,
           claimedMilestones: Array.isArray(p.claimedMilestones) ? p.claimedMilestones : [],
           claimedWeeklyChests: Array.isArray(p.claimedWeeklyChests) ? p.claimedWeeklyChests : [],
-          unlockedThemes: Array.isArray(p.unlockedThemes) && p.unlockedThemes.length > 0 ? p.unlockedThemes : ['dreamy_pastel'],
-          unlockedStamps: Array.isArray(p.unlockedStamps) && p.unlockedStamps.length > 0 ? p.unlockedStamps : ['100% Focus'],
-          unlockedChimes: Array.isArray(p.unlockedChimes) && p.unlockedChimes.length > 0 ? p.unlockedChimes : ['default'],
+          unlockedThemes: Array.from(new Set([
+            ...ALL_FREE_THEMES,
+            ...(Array.isArray(p.unlockedThemes) && p.unlockedThemes.length > 0 ? p.unlockedThemes : []),
+          ])),
+          unlockedStamps: Array.from(new Set([
+            '100% Focus',
+            ...(Array.isArray(p.unlockedStamps) && p.unlockedStamps.length > 0 ? p.unlockedStamps : []),
+          ])),
+          unlockedChimes: Array.from(new Set([
+            'default',
+            ...(Array.isArray(p.unlockedChimes) && p.unlockedChimes.length > 0 ? p.unlockedChimes : []),
+          ])),
           dailyQuests: Array.isArray(p.dailyQuests) && p.dailyQuests.length > 0 ? p.dailyQuests : createDefaultQuests(),
           lastQuestDate: typeof p.lastQuestDate === 'string' ? p.lastQuestDate : '',
         };

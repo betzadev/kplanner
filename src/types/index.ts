@@ -43,14 +43,14 @@ export interface TimerState {
 }
 
 export const DEFAULT_PASTEL_PALETTE: readonly HexColor[] = [
-  '#C2D8FC', // Soft Dreamy Sky Blue
-  '#9FC6FC', // Dreamy Periwinkle Accent
-  '#E4EDFC', // Cloud Mist Tint
-  '#FDE2E4', // Soft Sakura Pink
-  '#E2ECE9', // Sage Mist Green
-  '#FFF1C5', // Buttercream Yellow
-  '#DFCCF1', // Lavender Dream
-  '#FCE1D4', // Warm Peach
+  '#C2D8FC' as HexColor, // Soft Dreamy Sky Blue
+  '#9FC6FC' as HexColor, // Dreamy Periwinkle Accent
+  '#E4EDFC' as HexColor, // Cloud Mist Tint
+  '#FDE2E4' as HexColor, // Soft Sakura Pink
+  '#E2ECE9' as HexColor, // Sage Mist Green
+  '#FFF1C5' as HexColor, // Buttercream Yellow
+  '#DFCCF1' as HexColor, // Lavender Dream
+  '#FCE1D4' as HexColor, // Warm Peach
 ] as const;
 
 export interface ColorThemePalette {
@@ -68,12 +68,57 @@ export const UNLOCKABLE_THEMES: ColorThemePalette[] = [
     colors: DEFAULT_PASTEL_PALETTE,
   },
   {
+    id: 'sakura_blossom',
+    name: 'Sakura Blossom',
+    priceGems: 0,
+    colors: [
+      '#FFB7B2' as HexColor, '#FFDAC1' as HexColor, '#E2F0CB' as HexColor, '#B5EAD7' as HexColor,
+      '#C7CEEA' as HexColor, '#FAD2E1' as HexColor, '#FDE2E4' as HexColor, '#DFCCF1' as HexColor
+    ],
+  },
+  {
+    id: 'lavender_mist',
+    name: 'Lavender Mist',
+    priceGems: 0,
+    colors: [
+      '#E0AAFF' as HexColor, '#C77DFF' as HexColor, '#9D4EDD' as HexColor, '#D8BBFF' as HexColor,
+      '#EFD3D7' as HexColor, '#D0D1FF' as HexColor, '#C8B6FF' as HexColor, '#B8C0FF' as HexColor
+    ],
+  },
+  {
+    id: 'ocean_breeze',
+    name: 'Ocean Breeze',
+    priceGems: 0,
+    colors: [
+      '#90E0EF' as HexColor, '#00B4D8' as HexColor, '#0077B6' as HexColor, '#CAF0F8' as HexColor,
+      '#48CAE4' as HexColor, '#A2D2FF' as HexColor, '#BDE0FE' as HexColor, '#D7E3FC' as HexColor
+    ],
+  },
+  {
+    id: 'nordic_minimal',
+    name: 'Nordic Minimal',
+    priceGems: 0,
+    colors: [
+      '#E5E5E5' as HexColor, '#D4D4D4' as HexColor, '#A3A3A3' as HexColor, '#737373' as HexColor,
+      '#CCD5AE' as HexColor, '#E9EDC9' as HexColor, '#FAEDCD' as HexColor, '#D4A373' as HexColor
+    ],
+  },
+  {
+    id: 'warm_latte',
+    name: 'Warm Latte',
+    priceGems: 0,
+    colors: [
+      '#DDB892' as HexColor, '#B08968' as HexColor, '#7F5539' as HexColor, '#EDE0D4' as HexColor,
+      '#E6CCB2' as HexColor, '#C6AC8F' as HexColor, '#EAE0D5' as HexColor, '#C9ADA7' as HexColor
+    ],
+  },
+  {
     id: 'matcha_cafe',
     name: 'Matcha Cafe',
     priceGems: 150,
     colors: [
-      '#C8D6AF', '#A3B899', '#E0E5D7', '#8A9A86',
-      '#D4DF9E', '#B7CE95', '#F2E8CF', '#6A994E'
+      '#C8D6AF' as HexColor, '#A3B899' as HexColor, '#E0E5D7' as HexColor, '#8A9A86' as HexColor,
+      '#D4DF9E' as HexColor, '#B7CE95' as HexColor, '#F2E8CF' as HexColor, '#6A994E' as HexColor
     ],
   },
   {
@@ -81,8 +126,8 @@ export const UNLOCKABLE_THEMES: ColorThemePalette[] = [
     name: 'Autumn Library',
     priceGems: 200,
     colors: [
-      '#E9C46A', '#F4A261', '#E76F51', '#DDA15E',
-      '#BC6C25', '#C77DFF', '#E29578', '#FFDDD2'
+      '#E9C46A' as HexColor, '#F4A261' as HexColor, '#E76F51' as HexColor, '#DDA15E' as HexColor,
+      '#BC6C25' as HexColor, '#C77DFF' as HexColor, '#E29578' as HexColor, '#FFDDD2' as HexColor
     ],
   },
   {
@@ -90,8 +135,8 @@ export const UNLOCKABLE_THEMES: ColorThemePalette[] = [
     name: 'Monochrome Ink',
     priceGems: 250,
     colors: [
-      '#D1D5DB', '#9CA3AF', '#6B7280', '#4B5563',
-      '#374151', '#E5E7EB', '#CBD5E1', '#94A3B8'
+      '#D1D5DB' as HexColor, '#9CA3AF' as HexColor, '#6B7280' as HexColor, '#4B5563' as HexColor,
+      '#374151' as HexColor, '#E5E7EB' as HexColor, '#CBD5E1' as HexColor, '#94A3B8' as HexColor
     ],
   },
   {
@@ -99,8 +144,8 @@ export const UNLOCKABLE_THEMES: ColorThemePalette[] = [
     name: 'Cyberpunk Neon',
     priceGems: 300,
     colors: [
-      '#06D6A0', '#118AB2', '#FFD166', '#EF476F',
-      '#7209B7', '#4CC9F0', '#F72585', '#3A0CA3'
+      '#06D6A0' as HexColor, '#118AB2' as HexColor, '#FFD166' as HexColor, '#EF476F' as HexColor,
+      '#7209B7' as HexColor, '#4CC9F0' as HexColor, '#F72585' as HexColor, '#3A0CA3' as HexColor
     ],
   },
 ];

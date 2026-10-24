@@ -7,6 +7,7 @@ import { useTimerStore } from './store/useTimerStore';
 import { useThemeStore } from './store/useThemeStore';
 import { useGamificationStore } from './store/useGamificationStore';
 import { useDDayStore } from './store/useDDayStore';
+import { useLanguageStore } from './store/useLanguageStore';
 import { useDailySheet } from './hooks/useDailySheet';
 
 import { PlannerHeader } from './components/planner/PlannerHeader';
@@ -40,6 +41,9 @@ import { TbPlant2 } from 'react-icons/tb';
 type SheetSubView = 'tasks' | 'grid' | 'memos' | 'all';
 
 export default function App() {
+  const t = useLanguageStore((state) => state.t);
+  const initLanguage = useLanguageStore((state) => state.initLanguage);
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('planner');
   const [sheetSubView, setSheetSubView] = useState<SheetSubView>('tasks');
   const [streakModalOpen, setStreakModalOpen] = useState(false);
@@ -69,10 +73,11 @@ export default function App() {
   const initGamification = useGamificationStore((state) => state.initFromRust);
 
   const { calculateStreak, gems, initDailyQuests } = useGamificationStore();
-  const { streakCount, hasStudiedToday } = calculateStreak();
+  const { streakCount = 0, hasStudiedToday = false } = calculateStreak ? calculateStreak() : { streakCount: 0, hasStudiedToday: false };
 
   // Initialize data and stores from Rust backend / system
   useEffect(() => {
+    initLanguage();
     initTheme();
     initSubjects();
     initTimer();
@@ -90,6 +95,7 @@ export default function App() {
     updateMainGoal,
     updateBottomMemo,
     addTask,
+    updateTask,
     toggleTask,
     deleteTask,
   } = useDailySheet(currentDate);
@@ -115,17 +121,17 @@ export default function App() {
     <div className="min-h-screen dreamy-bg flex flex-col font-sans text-slate-800 dark:text-slate-100 pb-28 select-none transition-colors duration-200">
       {/* Mobile & Desktop Top Header */}
       <header className="bg-white/85 dark:bg-[#0B1120]/85 backdrop-blur-md border-b border-[#C2D8FC]/60 dark:border-slate-800 sticky top-0 z-30 shadow-2xs pt-[env(safe-area-inset-top,0px)] transition-colors">
-        <div className="max-w-md md:max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-md md:max-w-4xl mx-auto px-3.5 sm:px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-[#9FC6FC] text-blue-950 dark:text-slate-900 flex items-center justify-center shadow-xs">
               <TbPlant2 size={24} className="text-blue-950 dark:text-slate-900" />
             </div>
             <div>
               <span className="text-xs sm:text-sm font-black tracking-wider text-slate-900 dark:text-white block leading-none">
-                K-PLANNER
+                {t.appTitle}
               </span>
               <span className="text-[10px] font-semibold text-blue-600 dark:text-[#9FC6FC] leading-none">
-                Dreamy Study
+                {t.appSubtitle}
               </span>
             </div>
           </div>
@@ -139,22 +145,24 @@ export default function App() {
                 setShareCardOpen(true);
                 triggerHaptic('light');
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer shadow-2xs text-blue-700 dark:text-[#9FC6FC]"
-              title="Export 9:16 Studygram Story Card"
+              className="min-h-[44px] sm:min-h-[38px] px-2.5 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer shadow-2xs text-blue-700 dark:text-[#9FC6FC] flex items-center gap-1"
+              title={t.shareTitle}
+              aria-label={t.shareTitle}
             >
-              <Share2 size={13} />
-              <span className="text-xs font-bold hidden sm:inline">Share</span>
+              <Share2 size={14} />
+              <span className="text-xs font-bold hidden sm:inline">{t.share}</span>
             </button>
 
-            {/* Duolingo Streak Pill */}
+            {/* Streak Pill */}
             <button
               type="button"
               onClick={() => {
                 setStreakModalOpen(true);
                 triggerHaptic('light');
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#E4EDFC] dark:bg-slate-800 border border-[#9FC6FC] dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer shadow-2xs"
-              title="View Study Streak & Rewards"
+              className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#E4EDFC] dark:bg-slate-800 border border-[#9FC6FC] dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer shadow-2xs"
+              title={t.streak}
+              aria-label={t.streak}
             >
               <Flame
                 size={15}
@@ -172,8 +180,9 @@ export default function App() {
                 setStreakModalOpen(true);
                 triggerHaptic('light');
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer shadow-2xs"
-              title="Study Gems"
+              className="min-h-[44px] sm:min-h-[38px] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-800 border border-[#C2D8FC] dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer shadow-2xs"
+              title={t.gems}
+              aria-label={t.gems}
             >
               <Gem size={14} className="text-cyan-500" />
               <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-200">
@@ -209,6 +218,7 @@ export default function App() {
                     date={currentDate}
                     tasks={tasks}
                     onAddTask={addTask}
+                    onUpdateTask={updateTask}
                     onToggleTask={toggleTask}
                     onDeleteTask={deleteTask}
                     onStartFocus={(taskId, subjectId) => {
@@ -257,21 +267,21 @@ export default function App() {
       {/* Floating Submenu for Mobile Sheet (Tasks / Grid / Memos / All) */}
       {activeTab === 'planner' && (
         <div className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] left-0 right-0 z-30 flex justify-center px-4 pointer-events-none">
-          <div className="pointer-events-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-[#9FC6FC]/80 dark:border-slate-700 rounded-full p-1.5 shadow-lg flex items-center gap-1.5 transition-all">
+          <div className="pointer-events-auto bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-[#9FC6FC]/80 dark:border-slate-700 rounded-full p-1 shadow-lg flex items-center gap-1 transition-all">
             <button
               type="button"
               onClick={() => {
                 setSheetSubView('tasks');
                 triggerHaptic('light');
               }}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
+              className={`min-h-[44px] flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
                 sheetSubView === 'tasks'
                   ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <CheckSquare size={14} />
-              <span>Tasks ({tasks.filter((t) => !t.isCompleted).length})</span>
+              <span>{t.dailyTasks} ({tasks.filter((task) => !task.isCompleted).length})</span>
             </button>
 
             <button
@@ -280,14 +290,14 @@ export default function App() {
                 setSheetSubView('grid');
                 triggerHaptic('light');
               }}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
+              className={`min-h-[44px] flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
                 sheetSubView === 'grid'
                   ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <Grid3X3 size={14} />
-              <span>10m Grid</span>
+              <span>{t.gridTitle}</span>
             </button>
 
             <button
@@ -296,14 +306,14 @@ export default function App() {
                 setSheetSubView('memos');
                 triggerHaptic('light');
               }}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
+              className={`min-h-[44px] flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
                 sheetSubView === 'memos'
                   ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               <FileText size={14} />
-              <span>Notes</span>
+              <span>{t.notesTitle}</span>
             </button>
 
             <button
@@ -312,7 +322,7 @@ export default function App() {
                 setSheetSubView('all');
                 triggerHaptic('light');
               }}
-              className={`hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
+              className={`hidden sm:flex min-h-[44px] items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors cursor-pointer ${
                 sheetSubView === 'all'
                   ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -331,7 +341,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => handleTabSwitch('planner')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
+            className={`min-h-[44px] flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
               activeTab === 'planner'
                 ? 'text-blue-700 dark:text-[#9FC6FC] font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
@@ -344,13 +354,13 @@ export default function App() {
             >
               <Calendar size={20} strokeWidth={activeTab === 'planner' ? 2.5 : 2} />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight">Sheet</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">{t.navSheet}</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleTabSwitch('timer')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
+            className={`min-h-[44px] flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
               activeTab === 'timer'
                 ? 'text-blue-700 dark:text-[#9FC6FC] font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
@@ -363,13 +373,13 @@ export default function App() {
             >
               <Clock size={20} strokeWidth={activeTab === 'timer' ? 2.5 : 2} />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight">Timer</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">{t.navTimer}</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleTabSwitch('analytics')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
+            className={`min-h-[44px] flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
               activeTab === 'analytics'
                 ? 'text-blue-700 dark:text-[#9FC6FC] font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
@@ -382,13 +392,13 @@ export default function App() {
             >
               <BarChart3 size={20} strokeWidth={activeTab === 'analytics' ? 2.5 : 2} />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight">Stats</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">{t.navStats}</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleTabSwitch('settings')}
-            className={`flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
+            className={`min-h-[44px] flex flex-col items-center justify-center flex-1 py-1 transition-all cursor-pointer active:scale-95 ${
               activeTab === 'settings'
                 ? 'text-blue-700 dark:text-[#9FC6FC] font-extrabold'
                 : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
@@ -401,7 +411,7 @@ export default function App() {
             >
               <Settings size={20} strokeWidth={activeTab === 'settings' ? 2.5 : 2} />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight">Settings</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">{t.navSettings}</span>
           </button>
         </div>
       </nav>

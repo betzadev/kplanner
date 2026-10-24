@@ -14,6 +14,7 @@ interface SyncState {
   framesSynced: number;
   syncNow: () => Promise<{ success: boolean; frames?: number; error?: string }>;
   setStatus: (status: SyncStatus, errorMessage?: string | null) => void;
+  dismissError: () => void;
 }
 
 export const useSyncStore = create<SyncState>((set, get) => ({
@@ -26,14 +27,18 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     set({ status, errorMessage });
   },
 
+  dismissError: () => {
+    set({ status: 'synced', errorMessage: null });
+  },
+
   syncNow: async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      set({ status: 'offline', errorMessage: 'Device is offline' });
+      set({ status: 'offline', errorMessage: 'Device is offline. Local changes are saved safely.' });
       return { success: false, error: 'Device is offline' };
     }
 
     if (!isTauri()) {
-      set({ status: 'synced' });
+      set({ status: 'synced', lastSynced: new Date(), errorMessage: null });
       return { success: true, frames: 0 };
     }
 
@@ -46,9 +51,18 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         framesSynced: (get().framesSynced || 0) + (frames || 0),
         errorMessage: null,
       });
-      return { success: true, frames };
+      return { success: true, frames: frames ?? 0 };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      // If error is because no remote URL is configured, gracefully fall back to local synced mode
+      if (msg.includes('not initialized') || msg.includes('local') || msg.includes('no remote')) {
+        set({
+          status: 'synced',
+          lastSynced: new Date(),
+          errorMessage: null,
+        });
+        return { success: true, frames: 0 };
+      }
       set({ status: 'error', errorMessage: msg });
       return { success: false, error: msg };
     }
@@ -59,13 +73,13 @@ export async function syncDatabaseWithTurso() {
   return useSyncStore.getState().syncNow();
 }
 
-// Escuchar automáticamente la conexión/desconexión de red
+// Automatic network listeners
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
     useSyncStore.getState().syncNow();
   });
 
   window.addEventListener('offline', () => {
-    useSyncStore.getState().setStatus('offline', 'Device is offline');
+    useSyncStore.getState().setStatus('offline', 'Device is offline. Local changes are saved safely.');
   });
 }

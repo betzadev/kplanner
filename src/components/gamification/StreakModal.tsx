@@ -17,6 +17,7 @@ import {
   Gift,
   Medal,
   Gem,
+  Play,
 } from 'lucide-react';
 import {
   useGamificationStore,
@@ -29,6 +30,9 @@ import {
 } from '../../store/useGamificationStore';
 import { UNLOCKABLE_THEMES } from '../../types';
 import { triggerHaptic } from '../../utils/haptics';
+import { useLanguageStore } from '../../store/useLanguageStore';
+import { useTimerStore } from '../../store/useTimerStore';
+import { ambientAudio, ChimePresetType } from '../../utils/ambientAudio';
 
 interface StreakModalProps {
   isOpen: boolean;
@@ -36,14 +40,14 @@ interface StreakModalProps {
 }
 
 export function StreakModal({ isOpen, onClose }: StreakModalProps) {
+  const t = useLanguageStore((state) => state.t);
   const [activeTab, setActiveTab] = useState<'streak' | 'quests' | 'shop'>('streak');
-
 
   const xp = useGamificationStore((state) => state.xp) ?? 120;
   const gems = useGamificationStore((state) => state.gems) ?? 120;
   const streakFreezes = useGamificationStore((state) => state.streakFreezes) ?? 1;
   const claimedMilestones = useGamificationStore((state) => state.claimedMilestones) ?? [];
-  const unlockedThemes = useGamificationStore((state) => state.unlockedThemes) ?? ['dreamy_pastel'];
+  const unlockedThemes = useGamificationStore((state) => state.unlockedThemes) ?? [];
   const unlockedStamps = useGamificationStore((state) => state.unlockedStamps) ?? ['100% Focus'];
   const unlockedChimes = useGamificationStore((state) => state.unlockedChimes) ?? ['default'];
   const dailyQuests = useGamificationStore((state) => state.dailyQuests) ?? [];
@@ -57,6 +61,10 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
   const claimedWeeklyChests = useGamificationStore((state) => state.claimedWeeklyChests) ?? [];
   const getWeeklyStudyMinutes = useGamificationStore((state) => state.getWeeklyStudyMinutes);
   const claimWeeklyChest = useGamificationStore((state) => state.claimWeeklyChest);
+
+  const currentChimePreset = useTimerStore((state) => state.timerConfig.chimePreset || 'default');
+  const updateTimerConfig = useTimerStore((state) => state.updateConfig);
+
   const currentMonday = getCurrentWeekMonday();
   const weeklyMins = getWeeklyStudyMinutes ? getWeeklyStudyMinutes() : 0;
   const weeklyHours = Math.round((weeklyMins / 60) * 10) / 10;
@@ -83,6 +91,18 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
     triggerHaptic('success');
   };
 
+  const handlePreviewChime = (chimeId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    ambientAudio.playChime(chimeId as ChimePresetType);
+    triggerHaptic('light');
+  };
+
+  const handleSelectActiveChime = (chimeId: string) => {
+    updateTimerConfig({ chimePreset: chimeId });
+    ambientAudio.playChime(chimeId as ChimePresetType);
+    triggerHaptic('success');
+  };
+
   const getMilestoneIcon = (iconType: string) => {
     switch (iconType) {
       case 'flame':
@@ -101,13 +121,13 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === 'Escape') onClose();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen || typeof document === "undefined") return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
   return createPortal(
     <div
@@ -122,20 +142,21 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <Flame size={20} className="text-amber-500 fill-amber-500" />
+            <Flame size={22} className="text-amber-500 fill-amber-500" />
             <div>
               <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">
-                Streak & Study Rewards
+                {t.streakRewardsTitle}
               </h3>
               <p className="text-[10px] text-slate-400 dark:text-slate-500">
-                Level up your daily learning habit
+                {t.streakRewardsSubtitle}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl cursor-pointer"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl cursor-pointer"
+            aria-label="Close"
           >
             <X size={18} />
           </button>
@@ -149,14 +170,14 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               setActiveTab('streak');
               triggerHaptic('light');
             }}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+            className={`flex-1 min-h-[38px] py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 ${
               activeTab === 'streak'
                 ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Flame size={13} />
-            <span>Streak</span>
+            <Flame size={14} />
+            <span>{t.tabStreak}</span>
           </button>
 
           <button
@@ -165,14 +186,14 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               setActiveTab('quests');
               triggerHaptic('light');
             }}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+            className={`flex-1 min-h-[38px] py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 ${
               activeTab === 'quests'
                 ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <ListTodo size={13} />
-            <span>Quests</span>
+            <ListTodo size={14} />
+            <span>{t.tabQuests}</span>
           </button>
 
           <button
@@ -181,21 +202,20 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               setActiveTab('shop');
               triggerHaptic('light');
             }}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 ${
+            className={`flex-1 min-h-[38px] py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 ${
               activeTab === 'shop'
                 ? 'bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <ShoppingBag size={13} />
-            <span>Shop</span>
+            <ShoppingBag size={14} />
+            <span>{t.tabShop}</span>
           </button>
         </div>
 
         {/* 1. STREAK TAB */}
         {activeTab === 'streak' && (
           <div className="space-y-3">
-            {/* Duolingo Hero Flame Banner */}
             <div className="bg-[#E4EDFC] dark:bg-slate-800/90 border border-[#C2D8FC] dark:border-slate-700 rounded-2xl p-3.5 text-center">
               <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-white dark:bg-slate-900 shadow-xs mb-1.5">
                 <Flame size={32} className="text-amber-500 fill-amber-500" />
@@ -210,7 +230,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               </p>
 
               {/* 7-Day Flame Track */}
-              <div className="flex items-center justify-between gap-1 mt-3 pt-2.5 ">
+              <div className="flex items-center justify-between gap-1 mt-3 pt-2.5">
                 {weekDays.map((d) => (
                   <div key={d.date} className="flex flex-col items-center gap-1 flex-1 min-w-0">
                     <div
@@ -260,13 +280,13 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
               </div>
             </div>
 
-            {/* Weekly Milestone Study Chests (Phase 4.2) */}
+            {/* Weekly Milestone Study Chests */}
             <div className="bg-[#F0F5FD] dark:bg-slate-800/80 border border-[#C2D8FC] dark:border-slate-700 rounded-2xl p-3.5 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Gift size={15} className="text-blue-700 dark:text-[#9FC6FC]" />
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                    Weekly Study Chests
+                    {t.weeklyChestsTitle}
                   </span>
                 </div>
                 <span className="text-[9px] font-semibold text-slate-600 dark:text-slate-400 bg-white/90 dark:bg-slate-900 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
@@ -274,7 +294,6 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                 </span>
               </div>
 
-              {/* Overall Progress Bar */}
               <div className="space-y-1">
                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                   <div
@@ -290,29 +309,28 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                 </div>
               </div>
 
-              {/* 3 Chests Row */}
               <div className="grid grid-cols-3 gap-1.5 pt-1">
                 {WEEKLY_CHESTS.map((chest) => {
                   const weekKey = `${chest.id}_${currentMonday}`;
                   const isClaimed = claimedWeeklyChests.includes(weekKey);
                   const isUnlocked = weeklyMins >= chest.minutesRequired;
-                  const isGold = chest.id === "gold";
+                  const isGold = chest.id === 'gold';
 
                   return (
                     <div
                       key={chest.id}
                       className={`flex flex-col items-center text-center p-2 rounded-xl border transition-colors ${
                         isClaimed
-                          ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300"
+                          ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-300'
                           : isUnlocked
-                          ? "bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-600 shadow-xs"
-                          : "bg-white/70 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 opacity-80"
+                          ? 'bg-white dark:bg-slate-900 border-blue-300 dark:border-blue-600 shadow-xs'
+                          : 'bg-white/70 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 opacity-80'
                       }`}
                     >
                       <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-1">
-                        {chest.id === "bronze" ? (
+                        {chest.id === 'bronze' ? (
                           <Medal size={17} className="text-amber-700" />
-                        ) : chest.id === "silver" ? (
+                        ) : chest.id === 'silver' ? (
                           <Medal size={17} className="text-slate-400" />
                         ) : (
                           <Crown size={17} className="text-amber-500" />
@@ -338,24 +356,24 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
 
                       <div className="mt-1.5 w-full">
                         {isClaimed ? (
-                          <span className="flex items-center justify-center gap-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
-                            <Check size={10} /> Claimed
+                          <span className="flex items-center justify-center gap-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 min-h-[32px]">
+                            <Check size={10} /> {t.claimed}
                           </span>
                         ) : isUnlocked ? (
                           <button
                             type="button"
                             onClick={() => {
                               if (claimWeeklyChest(chest.id)) {
-                                triggerHaptic("success");
+                                triggerHaptic('success');
                               }
                             }}
-                            className="w-full py-1 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-bold rounded-lg shadow-xs cursor-pointer active:scale-95 transition-transform"
+                            className="w-full min-h-[32px] py-1 bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-bold rounded-lg shadow-xs cursor-pointer active:scale-95 transition-transform"
                           >
-                            Claim
+                            {t.claim}
                           </button>
                         ) : (
-                          <span className="text-[8px] text-slate-400 block text-center">
-                            {Math.max(0, Math.round((chest.minutesRequired - weeklyMins) / 60 * 10) / 10)}h left
+                          <span className="text-[8px] text-slate-400 block text-center min-h-[32px] flex items-center justify-center">
+                            {Math.max(0, Math.round(((chest.minutesRequired - weeklyMins) / 60) * 10) / 10)}h left
                           </span>
                         )}
                       </div>
@@ -368,7 +386,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
             {/* Milestone Badges List */}
             <div>
               <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
-                Milestone Achievements
+                {t.milestonesTitle}
               </div>
               <div className="space-y-1.5">
                 {STREAK_MILESTONES.map((m) => {
@@ -378,7 +396,7 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                   return (
                     <div
                       key={m.id}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
+                      className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors min-h-[44px] ${
                         isClaimed
                           ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40 text-emerald-900 dark:text-emerald-300'
                           : isUnlocked
@@ -397,15 +415,15 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                       <div className="shrink-0 ml-2">
                         {isClaimed ? (
                           <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                            <Check size={12} /> Claimed
+                            <Check size={12} /> {t.claimed}
                           </span>
                         ) : isUnlocked ? (
                           <button
                             type="button"
                             onClick={() => handleClaim(m.id)}
-                            className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold rounded-lg shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                            className="min-h-[36px] px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold rounded-lg shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
                           >
-                            Claim +{m.gemReward} Gems
+                            {t.claim} +{m.gemReward} Gems
                           </button>
                         ) : (
                           <span className="text-[10px] text-slate-400 tabular-nums">
@@ -421,11 +439,11 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
           </div>
         )}
 
-        {/* 2. DAILY QUESTS TAB (Phase 4.3) */}
+        {/* 2. DAILY QUESTS TAB */}
         {activeTab === 'quests' && (
           <div className="space-y-2.5">
             <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-              Daily Micro-Challenges (Refreshes Daily)
+              {t.dailyQuestsTitle}
             </div>
 
             {dailyQuests.map((quest) => {
@@ -455,7 +473,6 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                     </span>
                   </div>
 
-                  {/* Progress bar */}
                   <div className="space-y-1">
                     <div className="flex justify-between text-[9px] tabular-nums text-slate-400">
                       <span>Progress</span>
@@ -471,20 +488,19 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                     </div>
                   </div>
 
-                  {/* Claim Button */}
                   {quest.isCompleted && !quest.isClaimed && (
                     <button
                       type="button"
                       onClick={() => handleClaimQuest(quest.id)}
-                      className="w-full py-1.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                      className="w-full min-h-[40px] py-1.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
                     >
-                      Claim Reward (+{quest.gemReward} Gems)
+                      {t.claim} (+{quest.gemReward} Gems)
                     </button>
                   )}
                   {quest.isClaimed && (
                     <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
                       <Check size={12} />
-                      <span>Completed & Claimed</span>
+                      <span>{t.claimed}</span>
                     </div>
                   )}
                 </div>
@@ -493,21 +509,22 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
           </div>
         )}
 
-        {/* 3. GEM SHOP TAB (Phase 4.1) */}
+        {/* 3. GEM SHOP TAB */}
         {activeTab === 'shop' && (
           <div className="space-y-3.5">
             {/* Balance banner */}
             <div className="flex items-center justify-between p-3 rounded-2xl bg-[#E4EDFC] dark:bg-slate-800 border border-[#9FC6FC] dark:border-slate-700">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                Available Gems
+                {t.availableGems}
               </span>
               <span className="text-base font-black tabular-nums text-cyan-600 dark:text-cyan-400">
-                <Gem size={15} className="inline text-cyan-500 mr-1" />{gems}
+                <Gem size={15} className="inline text-cyan-500 mr-1" />
+                {gems}
               </span>
             </div>
 
             {/* Streak Freeze item */}
-            <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex items-center justify-between">
+            <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 flex items-center justify-between min-h-[48px]">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-xl bg-cyan-100 dark:bg-cyan-950 flex items-center justify-center text-cyan-600 dark:text-cyan-400">
                   <Shield size={18} />
@@ -526,39 +543,127 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                 type="button"
                 onClick={handleBuyShield}
                 disabled={gems < 80}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                className={`min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
                   gems >= 80
                     ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
                     : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                Buy (80 Gems)
+                {t.buy} (80 Gems)
               </button>
+            </div>
+
+            {/* Synthesized Chimes (Bug 6 fix: immediate purchase persistence & select button) */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <BellRing size={14} className="text-amber-500" />
+                <span>{t.soundThemes}</span>
+              </div>
+
+              {AVAILABLE_CHIMES.map((chime) => {
+                const isOwned = unlockedChimes.includes(chime.id);
+                const isActive = currentChimePreset === chime.id;
+
+                return (
+                  <div
+                    key={chime.id}
+                    className={`p-2.5 rounded-2xl border transition-colors flex items-center justify-between min-h-[48px] ${
+                      isActive
+                        ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-950/40 dark:border-blue-700'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 pr-1">
+                      <button
+                        type="button"
+                        onClick={(e) => handlePreviewChime(chime.id, e)}
+                        className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-950 rounded-xl text-slate-600 dark:text-slate-300 cursor-pointer transition-colors shrink-0"
+                        title={t.soundPreview}
+                      >
+                        <Play size={13} className="fill-slate-600 dark:fill-slate-300" />
+                      </button>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate flex items-center gap-1">
+                          <span>{chime.name}</span>
+                          {isActive && (
+                            <span className="text-[9px] bg-blue-600 dark:bg-[#9FC6FC] text-white dark:text-slate-900 font-extrabold px-1.5 py-0.2 rounded-md">
+                              {t.active}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 truncate">{chime.description}</div>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 ml-1">
+                      {isOwned ? (
+                        isActive ? (
+                          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 min-h-[44px]">
+                            <Check size={14} /> {t.active}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectActiveChime(chime.id)}
+                            className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-[#E4EDFC] text-blue-700 dark:text-[#9FC6FC] border border-blue-200 dark:border-blue-900 cursor-pointer transition-colors"
+                          >
+                            {t.select}
+                          </button>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (buyChime(chime.id, chime.priceGems)) {
+                              triggerHaptic('success');
+                            } else {
+                              triggerHaptic('warning');
+                            }
+                          }}
+                          disabled={gems < chime.priceGems}
+                          className={`min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                            gems >= chime.priceGems
+                              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xs'
+                              : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
+                          }`}
+                        >
+                          {chime.priceGems} Gems
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Unlockable Subject Color Themes */}
             <div className="space-y-1.5">
               <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Palette size={13} className="text-blue-600" />
-                <span>Subject Color Themes</span>
+                <Palette size={14} className="text-blue-600" />
+                <span>{t.colorThemes}</span>
               </div>
 
-              {UNLOCKABLE_THEMES.filter((t) => t.priceGems > 0).map((theme) => {
-                const isOwned = unlockedThemes.includes(theme.id);
+              {UNLOCKABLE_THEMES.map((theme) => {
+                const isOwned = theme.priceGems === 0 || unlockedThemes.includes(theme.id);
                 return (
                   <div
                     key={theme.id}
-                    className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between"
+                    className="p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between min-h-[48px]"
                   >
                     <div>
-                      <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                        {theme.name}
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <span>{theme.name}</span>
+                        {theme.priceGems === 0 && (
+                          <span className="text-[9px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 font-bold px-1.5 py-0.2 rounded-md">
+                            Free
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 mt-1">
-                        {theme.colors.slice(0, 5).map((c) => (
+                        {theme.colors.slice(0, 6).map((c) => (
                           <span
                             key={c}
-                            className="w-3 h-3 rounded-full"
+                            className="w-3.5 h-3.5 rounded-full border border-black/10 shadow-2xs"
                             style={{ backgroundColor: c }}
                           />
                         ))}
@@ -566,8 +671,8 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                     </div>
 
                     {isOwned ? (
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Check size={12} /> Owned
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 min-h-[44px]">
+                        <Check size={14} /> {t.owned}
                       </span>
                     ) : (
                       <button
@@ -577,9 +682,9 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                           else triggerHaptic('warning');
                         }}
                         disabled={gems < theme.priceGems}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        className={`min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
                           gems >= theme.priceGems
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xs'
                             : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                         }`}
                       >
@@ -594,8 +699,8 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
             {/* Daily Rubber Stamps */}
             <div className="space-y-1.5">
               <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Stamp size={13} className="text-rose-500" />
-                <span>Daily Completion Stamps</span>
+                <Stamp size={14} className="text-rose-500" />
+                <span>{t.completionStamps}</span>
               </div>
 
               {AVAILABLE_STAMPS.filter((s) => s.priceGems > 0).map((stamp) => {
@@ -603,18 +708,18 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                 return (
                   <div
                     key={stamp.id}
-                    className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between"
+                    className="p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between min-h-[48px]"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-base">{stamp.icon}</span>
+                      <span className="text-lg">{stamp.icon}</span>
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
                         {stamp.name}
                       </span>
                     </div>
 
                     {isOwned ? (
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Check size={12} /> Owned
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 min-h-[44px]">
+                        <Check size={14} /> {t.owned}
                       </span>
                     ) : (
                       <button
@@ -624,60 +729,13 @@ export function StreakModal({ isOpen, onClose }: StreakModalProps) {
                           else triggerHaptic('warning');
                         }}
                         disabled={gems < stamp.priceGems}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        className={`min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
                           gems >= stamp.priceGems
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xs'
                             : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                         }`}
                       >
                         {stamp.priceGems} Gems
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Synthesized Chimes */}
-            <div className="space-y-1.5">
-              <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <BellRing size={13} className="text-amber-500" />
-                <span>Synthesized Timer Chimes</span>
-              </div>
-
-              {AVAILABLE_CHIMES.filter((c) => c.priceGems > 0).map((chime) => {
-                const isOwned = unlockedChimes.includes(chime.id);
-                return (
-                  <div
-                    key={chime.id}
-                    className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                        {chime.name}
-                      </div>
-                      <div className="text-[10px] text-slate-400">{chime.description}</div>
-                    </div>
-
-                    {isOwned ? (
-                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <Check size={12} /> Owned
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (buyChime(chime.id, chime.priceGems)) triggerHaptic('success');
-                          else triggerHaptic('warning');
-                        }}
-                        disabled={gems < chime.priceGems}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                          gems >= chime.priceGems
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                            : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
-                        }`}
-                      >
-                        {chime.priceGems} Gems
                       </button>
                     )}
                   </div>

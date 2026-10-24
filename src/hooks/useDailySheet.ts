@@ -11,6 +11,7 @@ export interface UseDailySheetReturn {
   updateMainGoal: (goal: string) => void;
   updateBottomMemo: (index: 0 | 1 | 2 | 3 | 4 | 5, content: string) => void;
   addTask: (title: string, subjectId: EntityId) => PlannerTask;
+  updateTask: (taskId: EntityId, updates: Partial<Omit<PlannerTask, 'id' | 'date'>>) => void;
   toggleTask: (taskId: EntityId) => void;
   deleteTask: (taskId: EntityId) => void;
 }
@@ -20,6 +21,7 @@ export function useDailySheet(date: DateString): UseDailySheetReturn {
   const updateMainGoal = usePlannerStore((state) => state.updateMainGoal);
   const updateBottomMemo = usePlannerStore((state) => state.updateBottomMemo);
   const addTask = usePlannerStore((state) => state.addTask);
+  const updateTask = usePlannerStore((state) => state.updateTask);
   const toggleTask = usePlannerStore((state) => state.toggleTask);
   const deleteTask = usePlannerStore((state) => state.deleteTask);
 
@@ -33,9 +35,10 @@ export function useDailySheet(date: DateString): UseDailySheetReturn {
       updateMainGoal: (goal: string) => updateMainGoal(date, goal),
       updateBottomMemo: (index, content) => updateBottomMemo(date, index, content),
       addTask: (title, subjectId) => addTask(date, title, subjectId),
+      updateTask: (taskId, updates) => updateTask(date, taskId, updates),
       toggleTask: (taskId) => toggleTask(date, taskId),
       deleteTask: (taskId) => deleteTask(date, taskId),
     }),
-    [sheet, date, updateMainGoal, updateBottomMemo, addTask, toggleTask, deleteTask]
+    [sheet, date, updateMainGoal, updateBottomMemo, addTask, updateTask, toggleTask, deleteTask]
   );
 }
